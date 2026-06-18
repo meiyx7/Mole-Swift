@@ -13,7 +13,9 @@ struct CLIOptions {
 
     /// Environment merged on top of the current process environment.
     func environment() -> [String: String] {
-        var env = ProcessInfo.processInfo.environment
+        var env: [String: String] = [:]
+        let info = NSProcessInfo.processInfo
+        for (k, v) in info.environment { env[k] = v }
         // Force a UTF-8 locale so size/label parsing stays stable.
         env["LC_ALL"] = "en_US.UTF-8"
         env["LANG"] = "en_US.UTF-8"
