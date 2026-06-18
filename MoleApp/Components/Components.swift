@@ -175,7 +175,7 @@ struct EmptyStateView: View {
         VStack(spacing: 14) {
             Image(systemName: systemImage)
                 .font(.system(size: 40, weight: .light))
-                .foregroundColor(.tertiary)
+                .foregroundColor(Color.gray.opacity(0.5))
             VStack(spacing: 4) {
                 Text(title).font(.headline)
                 Text(message).font(.subheadline).foregroundColor(.secondary)

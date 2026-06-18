@@ -51,7 +51,7 @@ struct SidebarView: View {
                             }
                         } icon: {
                             Image(systemName: feature.systemImage)
-                                .foregroundColor(.tint)
+                                .foregroundColor(Theme.accent)
                                 .frame(width: 22)
                         }
                         .tag(feature)

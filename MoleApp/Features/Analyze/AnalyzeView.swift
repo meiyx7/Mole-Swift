@@ -191,7 +191,7 @@ struct AnalyzeView: View {
                             .foregroundColor(.secondary)
                             .frame(width: 48, alignment: .trailing)
                         if entry.isDir {
-                            Image(systemName: "chevron.right").font(.system(size: 10)).foregroundColor(.tertiary)
+                            Image(systemName: "chevron.right").font(.system(size: 10)).foregroundColor(Color.gray.opacity(0.5))
                         }
                     }
                     GeometryReader { geo in
@@ -202,7 +202,7 @@ struct AnalyzeView: View {
                     }.frame(height: 6)
                     if !entry.lastAccess.isEmpty {
                         Text("Last access \(entry.lastAccess)")
-                            .font(.system(size: 10, design: .rounded)).foregroundColor(.tertiary)
+                            .font(.system(size: 10, design: .rounded)).foregroundColor(Color.gray.opacity(0.5))
                     }
                 }
             }

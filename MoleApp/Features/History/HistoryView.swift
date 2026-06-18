@@ -141,7 +141,7 @@ struct HistoryView: View {
                             .foregroundColor(.green)
                     }
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 10)).foregroundColor(.tertiary)
+                        .font(.system(size: 10)).foregroundColor(Color.gray.opacity(0.5))
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
                 .padding(.horizontal, 10).padding(.vertical, 10)
@@ -153,7 +153,7 @@ struct HistoryView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(session.deletions.prefix(40)) { del in
                         HStack {
-                            Image(systemName: "doc").font(.system(size: 9)).foregroundColor(.tertiary)
+                            Image(systemName: "doc").font(.system(size: 9)).foregroundColor(Color.gray.opacity(0.5))
                             Text(del.path)
                                 .font(.system(size: 10, design: .monospaced))
                                 .foregroundColor(.secondary)
@@ -162,14 +162,14 @@ struct HistoryView: View {
                             if del.size > 0 {
                                 Text(ByteFormatter.bytes(del.size))
                                     .font(.system(size: 10, design: .rounded))
-                                    .foregroundColor(.tertiary)
+                                    .foregroundColor(Color.gray.opacity(0.5))
                             }
                         }
                         .padding(.horizontal, 10).padding(.vertical, 3)
                     }
                     if session.deletions.count > 40 {
                         Text("…and \(session.deletions.count - 40) more")
-                            .font(.system(size: 10)).foregroundColor(.tertiary)
+                            .font(.system(size: 10)).foregroundColor(Color.gray.opacity(0.5))
                             .padding(.horizontal, 10).padding(.vertical, 4)
                     }
                 }

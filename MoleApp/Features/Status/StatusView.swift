@@ -369,11 +369,11 @@ struct StatusView: View {
                     Chart {
                         ForEach(history.rxHistory.indices, id: \.self) { i in
                             LineMark(x: .value("t", i), y: .value("rx", history.rxHistory[i]))
-                                .foregroundColor(.green)
+                                .foregroundStyle(.green)
                         }
                         ForEach(history.txHistory.indices, id: \.self) { i in
                             LineMark(x: .value("t", i), y: .value("tx", history.txHistory[i]))
-                                .foregroundColor(.orange)
+                                .foregroundStyle(.orange)
                         }
                     }
                     .chartXAxis(.hidden)

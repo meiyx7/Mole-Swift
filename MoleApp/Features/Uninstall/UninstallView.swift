@@ -165,7 +165,7 @@ struct UninstallView: View {
                     }
                     Text(entry.path)
                         .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.tertiary)
+                        .foregroundColor(Color.gray.opacity(0.5))
                         .lineLimit(1).truncationMode(.middle)
                 }
                 Spacer()
