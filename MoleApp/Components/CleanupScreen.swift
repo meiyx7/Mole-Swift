@@ -76,10 +76,10 @@ struct CleanupScreen: View {
                     ForEach(categories.indices, id: \.self) { i in
                         let c = categories[i]
                         HStack(spacing: 10) {
-                            Image(systemName: c.icon).foregroundStyle(Theme.accent).frame(width: 20)
+                            Image(systemName: c.icon).foregroundColor(Theme.accent).frame(width: 20)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(c.name).font(.system(size: 12, weight: .medium))
-                                Text(c.detail).font(.system(size: 10)).foregroundStyle(.secondary)
+                                Text(c.detail).font(.system(size: 10)).foregroundColor(.secondary)
                             }
                             Spacer(minLength: 0)
                         }
@@ -100,7 +100,7 @@ struct CleanupScreen: View {
                 }
                 if runner.lines.isEmpty && !runner.isRunning {
                     Text(previewHint)
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .font(.system(size: 12)).foregroundColor(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
                         .multilineTextAlignment(.center)
                 } else {
@@ -135,7 +135,7 @@ struct CleanupScreen: View {
                 .font(.system(size: 10, weight: .semibold))
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Theme.color(for: tone).opacity(0.18), in: Capsule())
-                .foregroundStyle(Theme.color(for: tone))
+                .foregroundColor(Theme.color(for: tone))
         }
     }
 

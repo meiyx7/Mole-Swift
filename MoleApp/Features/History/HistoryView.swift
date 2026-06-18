@@ -117,13 +117,13 @@ struct HistoryView: View {
             Button { vm.toggle(session.id) } label: {
                 HStack(spacing: 12) {
                     Image(systemName: commandIcon(session.command))
-                        .foregroundStyle(Theme.accent).frame(width: 20)
+                        .foregroundColor(Theme.accent).frame(width: 20)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(session.command.capitalized)
                             .font(.system(size: 13, weight: .semibold))
                         Text(session.timestamp)
                             .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(.secondary)
                     }
                     Spacer()
                     if session.dryRun {
@@ -131,17 +131,17 @@ struct HistoryView: View {
                             .font(.system(size: 9, weight: .bold))
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(Color.gray.opacity(0.2), in: Capsule())
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(.secondary)
                     }
                     VStack(alignment: .trailing, spacing: 1) {
                         Text("\(session.itemsDeleted) items")
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
                         Text(ByteFormatter.bytes(session.sizeReclaimed))
                             .font(.system(size: 11, design: .rounded))
-                            .foregroundStyle(.green)
+                            .foregroundColor(.green)
                     }
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 10)).foregroundStyle(.tertiary)
+                        .font(.system(size: 10)).foregroundColor(.tertiary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
                 .padding(.horizontal, 10).padding(.vertical, 10)
@@ -153,23 +153,23 @@ struct HistoryView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(session.deletions.prefix(40)) { del in
                         HStack {
-                            Image(systemName: "doc").font(.system(size: 9)).foregroundStyle(.tertiary)
+                            Image(systemName: "doc").font(.system(size: 9)).foregroundColor(.tertiary)
                             Text(del.path)
                                 .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(.secondary)
+                                .foregroundColor(.secondary)
                                 .lineLimit(1).truncationMode(.middle)
                             Spacer()
                             if del.size > 0 {
                                 Text(ByteFormatter.bytes(del.size))
                                     .font(.system(size: 10, design: .rounded))
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundColor(.tertiary)
                             }
                         }
                         .padding(.horizontal, 10).padding(.vertical, 3)
                     }
                     if session.deletions.count > 40 {
                         Text("…and \(session.deletions.count - 40) more")
-                            .font(.system(size: 10)).foregroundStyle(.tertiary)
+                            .font(.system(size: 10)).foregroundColor(.tertiary)
                             .padding(.horizontal, 10).padding(.vertical, 4)
                     }
                 }

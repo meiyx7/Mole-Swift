@@ -47,11 +47,11 @@ struct SidebarView: View {
                                     .font(.system(size: 13, weight: .medium))
                                 Text(feature.subtitle)
                                     .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundColor(.secondary)
                             }
                         } icon: {
                             Image(systemName: feature.systemImage)
-                                .foregroundStyle(.tint)
+                                .foregroundColor(.tint)
                                 .frame(width: 22)
                         }
                         .tag(feature)
@@ -69,13 +69,13 @@ struct SidebarView: View {
     private var footer: some View {
         HStack(spacing: 8) {
             Image(systemName: service.isInstalled ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                .foregroundStyle(service.isInstalled ? .green : .orange)
+                .foregroundColor(service.isInstalled ? .green : .orange)
             VStack(alignment: .leading, spacing: 0) {
                 Text(service.isInstalled ? "Mole CLI connected" : "Mole CLI not found")
                     .font(.system(size: 11, weight: .semibold))
                 Text(service.isInstalled ? "Ready to manage your Mac" : "Install via Homebrew to begin")
                     .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
             }
             Spacer(minLength: 0)
         }

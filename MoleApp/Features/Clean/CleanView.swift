@@ -96,11 +96,11 @@ struct CleanView: View {
                     ForEach(cleanCategories) { cat in
                         HStack(spacing: 10) {
                             Image(systemName: cat.systemImage)
-                                .foregroundStyle(Theme.accent)
+                                .foregroundColor(Theme.accent)
                                 .frame(width: 20)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(cat.name).font(.system(size: 12, weight: .medium))
-                                Text(cat.detail).font(.system(size: 10)).foregroundStyle(.secondary)
+                                Text(cat.detail).font(.system(size: 10)).foregroundColor(.secondary)
                             }
                             Spacer(minLength: 0)
                         }
@@ -121,7 +121,7 @@ struct CleanView: View {
                 }
                 if runner.lines.isEmpty && !runner.isRunning {
                     Text("Run a preview to see exactly what Mole would remove — safely, with no changes made.")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .font(.system(size: 12)).foregroundColor(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
                 } else {
                     ConsoleOutputView(lines: runner.lines)
@@ -156,7 +156,7 @@ struct CleanView: View {
                 .font(.system(size: 10, weight: .semibold))
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Theme.color(for: tone).opacity(0.18), in: Capsule())
-                .foregroundStyle(Theme.color(for: tone))
+                .foregroundColor(Theme.color(for: tone))
         }
     }
 

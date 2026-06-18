@@ -118,11 +118,11 @@ struct StatusView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Health Score")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
                     .textCase(.uppercase)
                 Text(snap.healthScoreMsg)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.color(for: tone))
+                    .foregroundColor(Theme.color(for: tone))
             }
         }
         .padding(.trailing, 4)
@@ -147,7 +147,7 @@ struct StatusView: View {
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     Text("\(cpu.logicalCPU) threads · \(cpu.coreCount) cores")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .font(.system(size: 11)).foregroundColor(.secondary)
                 }
                 HStack(alignment: .center, spacing: 16) {
                     RingGauge(value: cpu.usage, label: "CPU", tone: tone, size: 76)
@@ -160,7 +160,7 @@ struct StatusView: View {
                             Label("\(String(format: "%.2f", cpu.load15))", systemImage: "15.circle")
                         }
                         .font(.system(size: 11, design: .rounded))
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.secondary)
                     }
                     Spacer(minLength: 0)
                 }
@@ -176,7 +176,7 @@ struct StatusView: View {
         let shown = Array(cores.prefix(maxCores))
         return VStack(alignment: .leading, spacing: 4) {
             Text("Per-core usage")
-                .font(.system(size: 10)).foregroundStyle(.secondary).textCase(.uppercase)
+                .font(.system(size: 10)).foregroundColor(.secondary).textCase(.uppercase)
             HStack(alignment: .bottom, spacing: 3) {
                 ForEach(shown.indices, id: \.self) { i in
                     let v = shown[i]
@@ -202,7 +202,7 @@ struct StatusView: View {
                         .font(.system(size: 10, weight: .semibold))
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(Theme.color(for: tone).opacity(0.18), in: Capsule())
-                        .foregroundStyle(Theme.color(for: tone))
+                        .foregroundColor(Theme.color(for: tone))
                 }
                 HStack(alignment: .center, spacing: 16) {
                     RingGauge(value: mem.usedPercent, label: "RAM", tone: tone, size: 76)
@@ -216,7 +216,7 @@ struct StatusView: View {
                                 Text("Swap \(ByteFormatter.bytes(mem.swapUsed))")
                             }
                         }
-                        .font(.system(size: 11, design: .rounded)).foregroundStyle(.secondary)
+                        .font(.system(size: 11, design: .rounded)).foregroundColor(.secondary)
                     }
                     Spacer(minLength: 0)
                 }
@@ -232,12 +232,12 @@ struct StatusView: View {
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     if gpus.isEmpty {
-                        Text("No discrete GPU").font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text("No discrete GPU").font(.system(size: 11)).foregroundColor(.secondary)
                     }
                 }
                 if gpus.isEmpty {
                     Text("Integrated graphics only on this Mac.")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .font(.system(size: 12)).foregroundColor(.secondary)
                 } else {
                     ForEach(gpus.indices, id: \.self) { i in
                         let g = gpus[i]
@@ -251,7 +251,7 @@ struct StatusView: View {
                             }
                             if g.memoryTotal > 0 {
                                 Text("\(ByteFormatter.bytes(g.memoryUsed)) / \(ByteFormatter.bytes(g.memoryTotal)) VRAM")
-                                    .font(.system(size: 10, design: .rounded)).foregroundStyle(.secondary)
+                                    .font(.system(size: 10, design: .rounded)).foregroundColor(.secondary)
                             }
                         }
                     }
@@ -269,7 +269,7 @@ struct StatusView: View {
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     if t.fanCount > 0 {
-                        Text("\(t.fanSpeed) RPM").font(.system(size: 11, design: .rounded)).foregroundStyle(.secondary)
+                        Text("\(t.fanSpeed) RPM").font(.system(size: 11, design: .rounded)).foregroundColor(.secondary)
                     }
                 }
                 HStack(spacing: 18) {
@@ -293,9 +293,9 @@ struct StatusView: View {
 
     private func metric(_ title: String, _ value: String, tone: StatusTone) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 10)).foregroundStyle(.secondary).textCase(.uppercase)
+            Text(title).font(.system(size: 10)).foregroundColor(.secondary).textCase(.uppercase)
             Text(value).font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundStyle(Theme.color(for: tone))
+                .foregroundColor(Theme.color(for: tone))
         }
     }
 
@@ -318,7 +318,7 @@ struct StatusView: View {
                     Spacer()
                     if trash > 0 {
                         Label("\(trashApprox ? "≈ " : "")\(ByteFormatter.bytes(trash)) in Trash", systemImage: "trash")
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                            .font(.system(size: 10)).foregroundColor(.secondary)
                     }
                 }
                 ForEach(disks.indices, id: \.self) { i in
@@ -330,7 +330,7 @@ struct StatusView: View {
                                 .font(.system(size: 12, weight: .medium))
                             Spacer()
                             Text("\(ByteFormatter.bytes(d.used)) / \(ByteFormatter.bytes(d.total))")
-                                .font(.system(size: 11, design: .rounded)).foregroundStyle(.secondary)
+                                .font(.system(size: 11, design: .rounded)).foregroundColor(.secondary)
                         }
                         ProgressBar(value: d.usedPercent, tone: tone)
                     }
@@ -347,7 +347,7 @@ struct StatusView: View {
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     if proxy.enabled {
-                        Text("Proxy: \(proxy.type)").font(.system(size: 10)).foregroundStyle(.secondary)
+                        Text("Proxy: \(proxy.type)").font(.system(size: 10)).foregroundColor(.secondary)
                     }
                 }
                 if !nets.isEmpty {
@@ -355,25 +355,25 @@ struct StatusView: View {
                         let n = nets[i]
                         HStack {
                             Image(systemName: n.ip.isEmpty ? "wifi.slash" : "wifi")
-                                .foregroundStyle(n.ip.isEmpty ? .secondary : .green)
+                                .foregroundColor(n.ip.isEmpty ? .secondary : .green)
                             Text(n.name).font(.system(size: 12, weight: .medium))
                             Spacer()
                             Label(ByteFormatter.rate(bytesPerSecond: n.rxRateMBs * 1_000_000), systemImage: "arrow.down")
                             Label(ByteFormatter.rate(bytesPerSecond: n.txRateMBs * 1_000_000), systemImage: "arrow.up")
                         }
                         .font(.system(size: 11, design: .rounded))
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.secondary)
                     }
                 }
                 if !history.rxHistory.isEmpty {
                     Chart {
                         ForEach(history.rxHistory.indices, id: \.self) { i in
                             LineMark(x: .value("t", i), y: .value("rx", history.rxHistory[i]))
-                                .foregroundStyle(.green)
+                                .foregroundColor(.green)
                         }
                         ForEach(history.txHistory.indices, id: \.self) { i in
                             LineMark(x: .value("t", i), y: .value("tx", history.txHistory[i]))
-                                .foregroundStyle(.orange)
+                                .foregroundColor(.orange)
                         }
                     }
                     .chartXAxis(.hidden)
@@ -394,7 +394,7 @@ struct StatusView: View {
                 }
                 if batteries.isEmpty {
                     Text("No battery detected (desktop Mac).")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .font(.system(size: 12)).foregroundColor(.secondary)
                 } else {
                     ForEach(batteries.indices, id: \.self) { i in
                         let b = batteries[i]
@@ -402,12 +402,12 @@ struct StatusView: View {
                         let tone: StatusTone = b.percent < 20 ? .critical : (b.percent < 50 ? .warn : .good)
                         HStack(spacing: 12) {
                             Image(systemName: charging ? "battery.100.bolt" : "battery.100")
-                                .foregroundStyle(Theme.color(for: tone))
+                                .foregroundColor(Theme.color(for: tone))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("\(Int(b.percent))% · \(b.status)")
                                     .font(.system(size: 13, weight: .semibold))
                                 Text("\(b.health) · \(b.cycleCount) cycles\(b.timeLeft.isEmpty ? "" : " · \(b.timeLeft)")")
-                                    .font(.system(size: 11, design: .rounded)).foregroundStyle(.secondary)
+                                    .font(.system(size: 11, design: .rounded)).foregroundColor(.secondary)
                             }
                             Spacer(minLength: 0)
                         }
@@ -425,11 +425,11 @@ struct StatusView: View {
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     Text("\(devices.filter { $0.connected }.count)/\(devices.count) connected")
-                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                        .font(.system(size: 10)).foregroundColor(.secondary)
                 }
                 if devices.isEmpty {
                     Text("No paired devices found.")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .font(.system(size: 12)).foregroundColor(.secondary)
                 } else {
                     ForEach(devices.indices, id: \.self) { i in
                         let d = devices[i]
@@ -438,7 +438,7 @@ struct StatusView: View {
                             Text(d.name).font(.system(size: 12, weight: .medium))
                             Spacer()
                             if !d.battery.isEmpty {
-                                Text(d.battery).font(.system(size: 11, design: .rounded)).foregroundStyle(.secondary)
+                                Text(d.battery).font(.system(size: 11, design: .rounded)).foregroundColor(.secondary)
                             }
                         }
                     }
@@ -454,17 +454,17 @@ struct StatusView: View {
                     Label("Top Processes", systemImage: "flame")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
-                    Text("By CPU").font(.system(size: 10)).foregroundStyle(.secondary).textCase(.uppercase)
+                    Text("By CPU").font(.system(size: 10)).foregroundColor(.secondary).textCase(.uppercase)
                 }
                 ForEach(snap.topProcesses.prefix(8).indices, id: \.self) { i in
                     let p = snap.topProcesses[i]
                     let tone = StatusTone.forUsage(p.cpu)
                     HStack(spacing: 10) {
                         Text("\(i + 1)").font(.system(size: 11, weight: .bold, design: .rounded))
-                            .frame(width: 16).foregroundStyle(.secondary)
+                            .frame(width: 16).foregroundColor(.secondary)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(p.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
-                            Text("PID \(p.pid)").font(.system(size: 10, design: .rounded)).foregroundStyle(.secondary)
+                            Text("PID \(p.pid)").font(.system(size: 10, design: .rounded)).foregroundColor(.secondary)
                         }
                         Spacer()
                         ProgressBar(value: min(100, p.cpu), tone: tone).frame(width: 90)
@@ -485,18 +485,18 @@ struct StatusView: View {
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     Text("\(alerts.count)").font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
+                        .foregroundColor(.white)
                         .padding(.horizontal, 7).padding(.vertical, 1)
                         .background(Color.red, in: Capsule())
                 }
                 ForEach(alerts.prefix(6).indices, id: \.self) { i in
                     let a = alerts[i]
                     HStack {
-                        Image(systemName: "flame.fill").foregroundStyle(.red).font(.system(size: 11))
+                        Image(systemName: "flame.fill").foregroundColor(.red).font(.system(size: 11))
                         Text(a.name).font(.system(size: 12, weight: .medium))
-                        Text("\(ByteFormatter.percent(a.cpu))").font(.system(size: 11, design: .rounded)).foregroundStyle(.secondary)
+                        Text("\(ByteFormatter.percent(a.cpu))").font(.system(size: 11, design: .rounded)).foregroundColor(.secondary)
                         Spacer()
-                        Text(a.status).font(.system(size: 10)).foregroundStyle(.secondary)
+                        Text(a.status).font(.system(size: 10)).foregroundColor(.secondary)
                     }
                 }
             }

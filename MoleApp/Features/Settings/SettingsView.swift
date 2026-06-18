@@ -58,21 +58,21 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("About").font(.system(size: 13, weight: .semibold))
                 HStack {
-                    Label("CLI Version", systemImage: "tag").foregroundStyle(.secondary)
+                    Label("CLI Version", systemImage: "tag").foregroundColor(.secondary)
                     Spacer()
                     Text(version.isEmpty ? "—" : version)
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 }
                 HStack {
-                    Label("Binary", systemImage: "terminal").foregroundStyle(.secondary)
+                    Label("Binary", systemImage: "terminal").foregroundColor(.secondary)
                     Spacer()
                     Text(CLILocator.resolve() ?? "not found")
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.secondary)
                         .lineLimit(1).truncationMode(.middle)
                 }
                 HStack {
-                    Label("GUI Version", systemImage: "app").foregroundStyle(.secondary)
+                    Label("GUI Version", systemImage: "app").foregroundColor(.secondary)
                     Spacer()
                     Text("Mole 1.0.0")
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
@@ -90,7 +90,7 @@ struct SettingsView: View {
                     ScrollView {
                         Text(helpText)
                             .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(maxHeight: 220)
@@ -113,11 +113,11 @@ struct SettingsView: View {
                             .padding(.horizontal, 7).padding(.vertical, 2)
                             .background(touchidStatus.lowercased().contains("enabl") ? Color.green.opacity(0.18) : Color.gray.opacity(0.18),
                                         in: Capsule())
-                            .foregroundStyle(touchidStatus.lowercased().contains("enabl") ? .green : .secondary)
+                            .foregroundColor(touchidStatus.lowercased().contains("enabl") ? .green : .secondary)
                     }
                 }
                 Text("Authenticate sudo commands with Touch ID instead of typing your password.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(.system(size: 11)).foregroundColor(.secondary)
                 HStack(spacing: 8) {
                     Button {
                         Task {
@@ -159,7 +159,7 @@ struct SettingsView: View {
                 Label("Shell Completion", systemImage: "text.append")
                     .font(.system(size: 13, weight: .semibold))
                 Text("Generate tab-completion scripts for your shell.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(.system(size: 11)).foregroundColor(.secondary)
                 HStack(spacing: 8) {
                     Picker("Shell", selection: $selectedShell) {
                         ForEach(shells, id: \.self) { Text($0).tag($0) }
@@ -182,7 +182,7 @@ struct SettingsView: View {
                     ScrollView {
                         Text(completionScript)
                             .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(maxHeight: 160)
@@ -198,7 +198,7 @@ struct SettingsView: View {
                 Label("Update Mole", systemImage: "arrow.up.circle")
                     .font(.system(size: 13, weight: .semibold))
                 Text("Check for and install the latest version of the Mole CLI.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(.system(size: 11)).foregroundColor(.secondary)
                 HStack(spacing: 8) {
                     Button {
                         Task {
@@ -231,7 +231,7 @@ struct SettingsView: View {
                 Label("Remove Mole", systemImage: "trash")
                     .font(.system(size: 13, weight: .semibold))
                 Text("Uninstall the Mole CLI from your system.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(.system(size: 11)).foregroundColor(.secondary)
                 HStack(spacing: 8) {
                     Button {
                         Task { removePreview = await service.removePreview() }
@@ -246,7 +246,7 @@ struct SettingsView: View {
                     ScrollView {
                         Text(removePreview)
                             .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(maxHeight: 140)
@@ -266,7 +266,7 @@ struct SettingsView: View {
                     if let code = runner.exitCode {
                         Text(code == 0 ? "✓ done" : "exit \(code)")
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(code == 0 ? .green : .red)
+                            .foregroundColor(code == 0 ? .green : .red)
                     }
                 }
                 ConsoleOutputView(lines: runner.lines).frame(minHeight: 120, maxHeight: 240)

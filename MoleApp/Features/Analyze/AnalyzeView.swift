@@ -121,7 +121,7 @@ struct AnalyzeView: View {
             trailing: AnyView(
                 Text("\(result.totalFiles > 0 ? "\(result.totalFiles) items · " : "")\(ByteFormatter.bytes(result.totalSize))")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
             )
         )
     }
@@ -173,7 +173,7 @@ struct AnalyzeView: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: entry.isDir ? "folder.fill" : "doc")
-                    .foregroundStyle(entry.isDir ? Theme.accent : .secondary)
+                    .foregroundColor(entry.isDir ? Theme.accent : .secondary)
                     .frame(width: 18)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -188,10 +188,10 @@ struct AnalyzeView: View {
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
                         Text(ByteFormatter.percent(fraction))
                             .font(.system(size: 11, design: .rounded))
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(.secondary)
                             .frame(width: 48, alignment: .trailing)
                         if entry.isDir {
-                            Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(.tertiary)
+                            Image(systemName: "chevron.right").font(.system(size: 10)).foregroundColor(.tertiary)
                         }
                     }
                     GeometryReader { geo in
@@ -202,7 +202,7 @@ struct AnalyzeView: View {
                     }.frame(height: 6)
                     if !entry.lastAccess.isEmpty {
                         Text("Last access \(entry.lastAccess)")
-                            .font(.system(size: 10, design: .rounded)).foregroundStyle(.tertiary)
+                            .font(.system(size: 10, design: .rounded)).foregroundColor(.tertiary)
                     }
                 }
             }
@@ -218,7 +218,7 @@ struct AnalyzeView: View {
             .textCase(.uppercase)
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Theme.color(for: tone).opacity(0.18), in: Capsule())
-            .foregroundStyle(Theme.color(for: tone))
+            .foregroundColor(Theme.color(for: tone))
     }
 
     private func largeFilesSection(_ files: [AnalyzeFileEntry], total: Int64) -> some View {
@@ -228,13 +228,13 @@ struct AnalyzeView: View {
                     Label("Large Files", systemImage: "exclamationmark.triangle.fill")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
-                    Text("Top space hogs").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text("Top space hogs").font(.system(size: 10)).foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 6).padding(.bottom, 4)
                 let max = files.map { $0.size }.max() ?? 1
                 ForEach(files.prefix(12)) { file in
                     HStack(spacing: 12) {
-                        Image(systemName: "doc.fill").foregroundStyle(.orange).frame(width: 18)
+                        Image(systemName: "doc.fill").foregroundColor(.orange).frame(width: 18)
                         Text(file.name).font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
                         Spacer()
                         GeometryReader { geo in

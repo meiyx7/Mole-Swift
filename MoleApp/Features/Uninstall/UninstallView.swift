@@ -127,7 +127,7 @@ struct UninstallView: View {
             VStack(spacing: 0) {
                 HStack {
                     Text("\(vm.apps.count) apps · \(vm.selected.count) selected")
-                        .font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+                        .font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
                     Spacer()
                     Button("Select All") { vm.selectAll() }.buttonStyle(.borderless).font(.system(size: 11))
                     Button("Clear") { vm.clearSelection() }.buttonStyle(.borderless).font(.system(size: 11))
@@ -149,7 +149,7 @@ struct UninstallView: View {
         return Button { vm.toggle(entry) } label: {
             HStack(spacing: 12) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? Theme.accent : .secondary)
+                    .foregroundColor(isSelected ? Theme.accent : .secondary)
                     .font(.system(size: 16))
                 appIcon(for: entry)
                 VStack(alignment: .leading, spacing: 2) {
@@ -160,18 +160,18 @@ struct UninstallView: View {
                                 .font(.system(size: 9, weight: .semibold))
                                 .padding(.horizontal, 5).padding(.vertical, 1)
                                 .background(Color.orange.opacity(0.18), in: Capsule())
-                                .foregroundStyle(.orange)
+                                .foregroundColor(.orange)
                         }
                     }
                     Text(entry.path)
                         .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.tertiary)
+                        .foregroundColor(.tertiary)
                         .lineLimit(1).truncationMode(.middle)
                 }
                 Spacer()
                 Text(entry.size)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
             }
             .padding(.horizontal, 8).padding(.vertical, 6)
             .contentShape(Rectangle())
@@ -198,7 +198,7 @@ struct UninstallView: View {
                     if let code = runner.exitCode {
                         Text(code == 0 ? "✓ done" : "exit \(code)")
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(code == 0 ? .green : .red)
+                            .foregroundColor(code == 0 ? .green : .red)
                     }
                 }
                 ConsoleOutputView(lines: runner.lines)

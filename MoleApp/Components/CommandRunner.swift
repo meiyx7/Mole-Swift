@@ -56,7 +56,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .font(.system(size: 13, weight: .semibold))
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
-            .foregroundStyle(.white)
+            .foregroundColor(.white)
             .background(
                 (tint.map { LinearGradient(colors: [$0, $0.opacity(0.75)],
                                            startPoint: .top, endPoint: .bottom) } ?? Theme.brand)

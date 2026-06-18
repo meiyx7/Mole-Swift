@@ -68,14 +68,14 @@ struct FeatureHeader: View {
                     .frame(width: 44, height: 44)
                 Image(systemName: systemImage)
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundColor(.white)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 22, weight: .bold))
                 Text(subtitle)
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
             }
             Spacer(minLength: 0)
             if let trailing { trailing }
@@ -97,11 +97,11 @@ struct StatTile: View {
                 if let systemImage {
                     Image(systemName: systemImage)
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Theme.color(for: tone))
+                        .foregroundColor(Theme.color(for: tone))
                 }
                 Text(title)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
                     .textCase(.uppercase)
             }
             Text(value)
@@ -156,7 +156,7 @@ struct RingGauge: View {
                     .font(.system(size: size * 0.26, weight: .bold, design: .rounded))
                 Text("%")
                     .font(.system(size: size * 0.13, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
             }
         }
         .frame(width: size, height: size)
@@ -175,10 +175,10 @@ struct EmptyStateView: View {
         VStack(spacing: 14) {
             Image(systemName: systemImage)
                 .font(.system(size: 40, weight: .light))
-                .foregroundStyle(.tertiary)
+                .foregroundColor(.tertiary)
             VStack(spacing: 4) {
                 Text(title).font(.headline)
-                Text(message).font(.subheadline).foregroundStyle(.secondary)
+                Text(message).font(.subheadline).foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
             }
             if let action {
@@ -198,7 +198,7 @@ struct LoadingView: View {
     var body: some View {
         VStack(spacing: 12) {
             ProgressView().controlSize(.large)
-            Text(title).font(.subheadline).foregroundStyle(.secondary)
+            Text(title).font(.subheadline).foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -231,7 +231,7 @@ struct ConsoleOutputView: View {
                     ForEach(lines) { line in
                         Text(line.text)
                             .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(line.isError ? Color.red.opacity(0.9) : .primary)
+                            .foregroundColor(line.isError ? Color.red.opacity(0.9) : .primary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .id(line.id)
                     }

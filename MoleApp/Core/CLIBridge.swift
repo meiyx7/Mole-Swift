@@ -13,7 +13,7 @@ struct CLIOptions {
 
     /// Environment merged on top of the current process environment.
     func environment() -> [String: String] {
-        var env = ProcessInfo.processInfo.environment
+        var env = ProcessInfo().environment
         // Force a UTF-8 locale so size/label parsing stays stable.
         env["LC_ALL"] = "en_US.UTF-8"
         env["LANG"] = "en_US.UTF-8"
@@ -230,16 +230,18 @@ enum CLIBridge {
         let outHandle = outPipe.fileHandleForReading
         let errHandle = errPipe.fileHandleForReading
 
-        let outThread = Thread { readLines(from: outHandle, isError: false) }
-        let errThread = Thread { readLines(from: errHandle, isError: true) }
-        outThread.qualityOfService = .userInitiated
-        errThread.qualityOfService = .userInitiated
-        outThread.start()
-        errThread.start()
+        let outSemaphore = DispatchSemaphore(value: 0)
+        let errSemaphore = DispatchSemaphore(value: 0)
+
+        let outQueue = DispatchQueue(label: "mole.stdout", qos: .userInitiated)
+        let errQueue = DispatchQueue(label: "mole.stderr", qos: .userInitiated)
+
+        outQueue.async { readLines(from: outHandle, isError: false); outSemaphore.signal() }
+        errQueue.async { readLines(from: errHandle, isError: true); errSemaphore.signal() }
 
         process.waitUntilExit()
-        outThread.waitUntilDone()
-        errThread.waitUntilDone()
+        outSemaphore.wait()
+        errSemaphore.wait()
         streamingTerminator = nil
         return process.terminationStatus
     }
