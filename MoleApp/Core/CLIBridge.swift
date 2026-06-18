@@ -14,9 +14,8 @@ struct CLIOptions {
     /// Environment merged on top of the current process environment.
     func environment() -> [String: String] {
         var env: [String: String] = [:]
-        var cEnv = environ
         var idx = 0
-        while let entry = cEnv?[idx] {
+        while let entry = environ[idx] {
             let str = String(cString: entry)
             if let eq = str.firstIndex(of: "=") {
                 let key = String(str[..<eq])
