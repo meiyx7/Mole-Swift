@@ -87,3 +87,14 @@ coverage.html
 session.json
 run_tests.ps1
 mole_guidelines.md
+
+# Xcode / Swift (MoleApp GUI)
+MoleApp/build/
+MoleApp/DerivedData/
+MoleApp/*.xcodeproj
+MoleApp/*.xcworkspace
+MoleApp/xcuserdata/
+MoleApp/Mole-macOS-universal.zip
+*.xcuserstate
+.build/
+
