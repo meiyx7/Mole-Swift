@@ -1,6 +1,7 @@
 name: MoleApp
 options:
   bundleIdPrefix: app.mole
+  xcodeVersion: "15"
   deploymentTarget:
     macOS: "13.0"
   createIntermediateGroups: true
