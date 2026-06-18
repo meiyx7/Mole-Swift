@@ -61,7 +61,7 @@ jobs:
         id: app
         working-directory: MoleApp
         run: |
-          APP_PATH="$(find build/Build/Products/Release -maxdepth 1 -name 'Mole.app' | head -n 1)"
+          APP_PATH="$(find build/Build/Products/Release -maxdepth 1 -name 'MoleApp.app' | head -n 1)"
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
           echo "Found app at: $APP_PATH"
 
@@ -75,7 +75,7 @@ jobs:
       - name: Package .app into zip
         working-directory: MoleApp/build/Build/Products/Release
         run: |
-          ditto -c -k --keepParent Mole.app Mole-macOS-universal.zip
+          ditto -c -k --keepParent MoleApp.app Mole-macOS-universal.zip
           shasum -a 256 Mole-macOS-universal.zip
 
       - name: Upload build artifact

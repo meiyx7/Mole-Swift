@@ -9,7 +9,7 @@
 	<key>CFBundleIdentifier</key>
 	<string>app.mole.MoleApp</string>
 	<key>CFBundleExecutable</key>
-	<string>Mole</string>
+	<string>MoleApp</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>CFBundleShortVersionString</key>
