@@ -13,7 +13,18 @@ struct CLIOptions {
 
     /// Environment merged on top of the current process environment.
     func environment() -> [String: String] {
-        var env = ProcessInfo.processInfo.environment
+        var env: [String: String] = [:]
+        var cEnv = environ
+        var idx = 0
+        while let entry = cEnv?[idx] {
+            let str = String(cString: entry)
+            if let eq = str.firstIndex(of: "=") {
+                let key = String(str[..<eq])
+                let value = String(str[str.index(after: eq)...])
+                env[key] = value
+            }
+            idx += 1
+        }
         // Force a UTF-8 locale so size/label parsing stays stable.
         env["LC_ALL"] = "en_US.UTF-8"
         env["LANG"] = "en_US.UTF-8"

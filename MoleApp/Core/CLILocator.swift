@@ -38,7 +38,8 @@ enum CLILocator {
 
     /// Looks up an executable by name on the user's `PATH`.
     private static func findInPATH(_ name: String) -> String? {
-        let path = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        guard let pathPtr = getenv("PATH") else { return nil }
+        let path = String(cString: pathPtr)
         for dir in path.split(separator: ":", omittingEmptySubsequences: true) {
             let candidate = "\(dir)/\(name)"
             if FileManager.default.isExecutableFile(atPath: candidate) {
