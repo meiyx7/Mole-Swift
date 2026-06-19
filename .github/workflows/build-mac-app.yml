@@ -2,7 +2,7 @@ name: Build macOS App
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, "trae/**"]
     tags: ["v*"]
     paths:
       - "MoleApp/**"
@@ -64,6 +64,22 @@ jobs:
           APP_PATH="$(find build/Build/Products/Release -maxdepth 1 -name 'MoleApp.app' | head -n 1)"
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
           echo "Found app at: $APP_PATH"
+
+      - name: Verify app icon compiled into bundle
+        working-directory: MoleApp
+        run: |
+          APP_PATH="${{ steps.app.outputs.app_path }}"
+          echo "Checking for AppIcon.icns in bundle..."
+          if [[ -f "$APP_PATH/Contents/Resources/AppIcon.icns" ]]; then
+            echo "OK: AppIcon.icns found ($(stat -f%z "$APP_PATH/Contents/Resources/AppIcon.icns") bytes)"
+          else
+            echo "ERROR: AppIcon.icns missing from bundle!"
+            echo "Contents of Resources:"
+            ls -la "$APP_PATH/Contents/Resources/"
+            exit 1
+          fi
+          # Also verify Info.plist references the icon
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP_PATH/Contents/Info.plist" || true
 
       - name: Ad-hoc sign & verify
         working-directory: MoleApp
