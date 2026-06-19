@@ -137,7 +137,7 @@ struct AnalyzeView: View {
     }
 
     private func summaryRow(_ result: AnalyzeResult) -> some View {
-        let cleanable = result.entries.filter { $0.cleanable }.reduce(Int64(0)) { $0 + $1.size }
+        let cleanable = result.entries.filter { $0.cleanable ?? false }.reduce(Int64(0)) { $0 + $1.size }
         return HStack(spacing: 14) {
             StatTile(title: loc.t("总大小", "Total Size"), value: ByteFormatter.bytes(result.totalSize),
                      systemImage: "externaldrive", tone: .neutral)
@@ -168,7 +168,7 @@ struct AnalyzeView: View {
     private func entryRow(_ entry: AnalyzeEntry, max: Int64, total: Int64) -> some View {
         let fraction = total > 0 ? Double(entry.size) / Double(total) * 100 : 0
         let width = max > 0 ? CGFloat(entry.size) / CGFloat(max) : 0
-        let tone: StatusTone = entry.cleanable ? .good : (entry.insight ? .warn : .neutral)
+        let tone: StatusTone = (entry.cleanable ?? false) ? .good : ((entry.insight ?? false) ? .warn : .neutral)
         return Button {
             if entry.isDir { Task { await vm.drill(into: entry.path) } }
         } label: {
@@ -179,9 +179,9 @@ struct AnalyzeView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(entry.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                        if entry.cleanable {
+                        if entry.cleanable ?? false {
                             badge(loc.t("可清理", "Cleanable"), tone: .good)
-                        } else if entry.insight {
+                        } else if entry.insight ?? false {
                             badge(loc.t("洞察", "Insight"), tone: .warn)
                         }
                         Spacer()
@@ -201,8 +201,8 @@ struct AnalyzeView: View {
                             .frame(width: width * geo.size.width, height: 6)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }.frame(height: 6)
-                    if !entry.lastAccess.isEmpty {
-                        Text(loc.t("最近访问 ", "Last access ") + entry.lastAccess)
+                    if let lastAccess = entry.lastAccess, !lastAccess.isEmpty {
+                        Text(loc.t("最近访问 ", "Last access ") + lastAccess)
                             .font(.system(size: 10, design: .rounded)).foregroundColor(Color.gray.opacity(0.5))
                     }
                 }

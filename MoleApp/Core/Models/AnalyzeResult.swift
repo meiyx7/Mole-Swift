@@ -22,9 +22,11 @@ struct AnalyzeEntry: Codable, Hashable, Identifiable {
     var path: String
     var size: Int64
     var isDir: Bool
-    var insight: Bool
-    var cleanable: Bool
-    var lastAccess: String
+    /// `insight` / `cleanable` / `last_access` are emitted with `omitempty`
+    /// by the Go CLI, so they are absent in overview mode and when false/empty.
+    var insight: Bool?
+    var cleanable: Bool?
+    var lastAccess: String?
 
     var id: String { path }
 

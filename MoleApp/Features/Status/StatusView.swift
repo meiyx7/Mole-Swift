@@ -276,7 +276,7 @@ struct StatusView: View {
                 HStack(spacing: 18) {
                     metric(loc.t("CPU", "CPU"), String(format: "%.0f°C", t.cpuTemp), tone: tone)
                     if t.gpuTemp > 0 { metric(loc.t("GPU", "GPU"), String(format: "%.0f°C", t.gpuTemp), tone: .neutral) }
-                    if snap.batteries.first != nil {
+                    if snap.batteries?.first != nil {
                         metric(loc.t("电池", "Battery"), String(format: "%.0f°C", t.batteryTemp), tone: .neutral)
                     }
                 }
@@ -305,7 +305,7 @@ struct StatusView: View {
         return LazyVGrid(columns: columns, spacing: 14) {
             disksCard(snap.disks, trash: snap.trashSize, trashApprox: snap.trashApprox)
             networkCard(snap.network, history: snap.networkHistory, proxy: snap.proxy)
-            batteryCard(snap.batteries)
+            batteryCard(snap.batteries ?? [])
             bluetoothCard(snap.bluetooth)
         }
     }

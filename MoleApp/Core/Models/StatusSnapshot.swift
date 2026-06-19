@@ -21,9 +21,13 @@ struct StatusSnapshot: Codable, Hashable {
     var network: [NetworkStatus]
     var networkHistory: NetworkHistory
     var proxy: ProxyStatus
-    var batteries: [BatteryStatus]
+    /// `batteries` is `null` on machines without a battery (Mac mini, Mac Pro,
+    /// iMac, desktop Macs in general).
+    var batteries: [BatteryStatus]?
     var thermal: ThermalStatus
-    var sensors: [SensorReading]
+    /// `sensors` is `null` on machines without SMC sensor access (e.g. Mac mini
+    /// without permission, or Apple Silicon without SMC).
+    var sensors: [SensorReading]?
     var bluetooth: [BluetoothDevice]
     var topProcesses: [ProcessInfo]
     var processWatch: ProcessWatchConfig
