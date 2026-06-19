@@ -643,24 +643,31 @@ _batch_preview_and_confirm() {
     fi
     echo -ne "${PURPLE}${ICON_ARROW}${NC} ${removal_note}  ${GREEN}Enter${NC} confirm, ${GRAY}ESC${NC} cancel: "
 
-    drain_pending_input # Clean up any pending input before confirmation
-    IFS= read -r -s -n1 key || key=""
-    drain_pending_input # Clean up any escape sequence remnants
-    case "$key" in
-        $'\e' | q | Q)
-            echo ""
-            echo ""
-            return 2
-            ;;
-        "" | $'\n' | $'\r' | y | Y)
-            echo "" # Move to next line
-            ;;
-        *)
-            echo ""
-            echo ""
-            return 2
-            ;;
-    esac
+    # Non-interactive callers (e.g. the Mole Mac app) confirm in their own UI
+    # and run with stdin closed; skip the blocking read instead of relying on
+    # EOF yielding an empty key that happens to match the confirm branch.
+    if [[ "${MOLE_NON_INTERACTIVE:-0}" == "1" ]]; then
+        echo ""
+    else
+        drain_pending_input # Clean up any pending input before confirmation
+        IFS= read -r -s -n1 key || key=""
+        drain_pending_input # Clean up any escape sequence remnants
+        case "$key" in
+            $'\e' | q | Q)
+                echo ""
+                echo ""
+                return 2
+                ;;
+            "" | $'\n' | $'\r' | y | Y)
+                echo "" # Move to next line
+                ;;
+            *)
+                echo ""
+                echo ""
+                return 2
+                ;;
+        esac
+    fi
 
     # Enable uninstall mode - allows deletion of data-protected apps (VPNs, dev tools, etc.)
     # that user explicitly chose to uninstall. System-critical components remain protected.

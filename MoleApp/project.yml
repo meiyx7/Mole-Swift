@@ -30,7 +30,6 @@ targets:
       - path: Core
       - path: Features
       - path: Components
-    resources:
       - path: Resources/Assets.xcassets
     settings:
       base:

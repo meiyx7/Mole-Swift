@@ -37,6 +37,28 @@ final class CommandRunner: ObservableObject {
         }
     }
 
+    /// Awaitable variant of `run` for callers that need to react to the
+    /// exit code after completion (e.g. showing a success/failure banner).
+    @discardableResult
+    func runAwaited(_ work: @escaping (@escaping (CLIOutputLine) -> Void) async throws -> Int32) async -> Int32 {
+        cancel()
+        lines.removeAll()
+        exitCode = nil
+        error = nil
+        isRunning = true
+        do {
+            let code = try await work { [weak self] line in
+                Task { @MainActor in self?.lines.append(line) }
+            }
+            self.exitCode = code
+        } catch {
+            self.error = error.localizedDescription
+            self.exitCode = -1
+        }
+        self.isRunning = false
+        return self.exitCode ?? -1
+    }
+
     func cancel() {
         task?.cancel()
         task = nil
