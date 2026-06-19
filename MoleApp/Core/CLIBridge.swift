@@ -61,7 +61,7 @@ enum CLIBridgeError: LocalizedError {
         case .binaryMissing:
             return "Mole CLI was not found. Install it with `brew install mole` and relaunch the app."
         case .decodeFailed(let detail):
-            return "Failed to parse CLI output: \(detail)"
+            return "Failed to parse CLI output: \(detail)\n\nDetails saved to: \(DebugLog.logPath)"
         case .executionFailed(let detail):
             return "Command failed to start: \(detail)"
         }
@@ -104,15 +104,20 @@ enum CLIBridge {
     /// Runs a command, collecting stdout and stderr into strings.
     static func run(_ args: [String], options: CLIOptions = CLIOptions()) async throws -> CLIResult {
         guard let binary = CLILocator.resolve() else { throw CLIBridgeError.binaryMissing }
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                do {
-                    let result = try capture(binary: binary, args: args, options: options)
-                    continuation.resume(returning: result)
-                } catch {
-                    continuation.resume(throwing: error)
+        do {
+            return try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        let result = try capture(binary: binary, args: args, options: options)
+                        continuation.resume(returning: result)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
                 }
             }
+        } catch let error as CLIBridgeError {
+            DebugLog.logExecutionFailure(args: args, error: error)
+            throw error
         }
     }
 
@@ -124,6 +129,11 @@ enum CLIBridge {
     ) async throws -> T {
         let result = try await run(args, options: options)
         guard let data = result.stdout.data(using: .utf8) else {
+            DebugLog.logDecodeFailure(
+                args: args, exitCode: result.exitCode,
+                stdout: result.stdout, stderr: result.stderr,
+                error: NSError(domain: "MoleApp", code: 1, userInfo: [NSLocalizedDescriptionKey: "output was not UTF-8"])
+            )
             throw CLIBridgeError.decodeFailed("output was not UTF-8")
         }
         // Surface stderr context when stdout is empty/unparseable so the GUI
@@ -132,6 +142,11 @@ enum CLIBridge {
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
+            DebugLog.logDecodeFailure(
+                args: args, exitCode: result.exitCode,
+                stdout: result.stdout, stderr: result.stderr,
+                error: error
+            )
             let stderrHint = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             let stdoutPreview = String(result.stdout.prefix(200))
             let detail = stderrHint.isEmpty
