@@ -1267,7 +1267,7 @@ uninstall_list_apps() {
         local first=1
         local app_data
         for app_data in "${apps_data[@]+"${apps_data[@]}"}"; do
-            IFS='|' read -r _ app_path app_name bundle_id size _ _ <<< "$app_data"
+            IFS='|' read -r epoch app_path app_name bundle_id size last_used size_kb <<< "$app_data"
             local cask=""
             if is_homebrew_available; then
                 cask=$(get_brew_cask_name "$app_path" 2> /dev/null || true)
@@ -1277,19 +1277,26 @@ uninstall_list_apps() {
             [[ -n "$cask" ]] && source_label="Homebrew"
             local size_display
             size_display=$(uninstall_normalize_size_display "$size")
+            # Numeric fields for GUI sorting. size_kb is bytes/1024; epoch is
+            # the last-used timestamp (0 when unknown). Coerce to integers so
+            # the JSON stays valid even when a scan column is empty.
+            [[ "$size_kb" =~ ^[0-9]+$ ]] || size_kb=0
+            [[ "$epoch" =~ ^[0-9]+$ ]] || epoch=0
             if [[ $first -eq 1 ]]; then
                 first=0
                 printf '\n'
             else
                 printf ',\n'
             fi
-            printf '  {"name": "%s", "bundle_id": "%s", "source": "%s", "uninstall_name": "%s", "path": "%s", "size": "%s"}' \
+            printf '  {"name": "%s", "bundle_id": "%s", "source": "%s", "uninstall_name": "%s", "path": "%s", "size": "%s", "size_kb": %s, "last_used_epoch": %s}' \
                 "$(uninstall_list_json_escape "$app_name")" \
                 "$(uninstall_list_json_escape "$bundle_id")" \
                 "$source_label" \
                 "$(uninstall_list_json_escape "$uninstall_name")" \
                 "$(uninstall_list_json_escape "$app_path")" \
-                "$(uninstall_list_json_escape "$size_display")"
+                "$(uninstall_list_json_escape "$size_display")" \
+                "$size_kb" \
+                "$epoch"
         done
         if [[ $first -eq 0 ]]; then
             printf '\n'
@@ -1453,12 +1460,20 @@ main() {
         done
 
         printf '\n'
-        printf "Proceed with uninstallation? [y/N] "
-        local confirm
-        read -r confirm
-        if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-            echo "Aborted."
-            return 0
+        # Non-interactive callers (e.g. the Mole Mac app) have already
+        # confirmed via their own UI and drive stdin from /dev/null, so a
+        # blocking read here would hit EOF, leave $confirm empty, and silently
+        # abort with exit 0 — looking like success while deleting nothing.
+        if [[ "${MOLE_NON_INTERACTIVE:-0}" != "1" ]]; then
+            printf "Proceed with uninstallation? [y/N] "
+            local confirm
+            read -r confirm
+            if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+                echo "Aborted."
+                return 0
+            fi
+        else
+            echo "Proceeding with uninstallation (non-interactive mode)..."
         fi
 
         batch_uninstall_applications

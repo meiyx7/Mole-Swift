@@ -37,6 +37,30 @@ final class CommandRunner: ObservableObject {
         }
     }
 
+    /// Awaits the full run to completion and returns the exit code, while still
+    /// streaming lines to `lines` so the console view updates live. Use this
+    /// when a caller needs to react to the result (e.g. a success/failure
+    /// banner) instead of the fire-and-forget `run`.
+    @discardableResult
+    func runAwaited(_ work: @escaping (@escaping (CLIOutputLine) -> Void) async throws -> Int32) async -> Int32 {
+        cancel()
+        lines.removeAll()
+        exitCode = nil
+        error = nil
+        isRunning = true
+        do {
+            let code = try await work { [weak self] line in
+                Task { @MainActor in self?.lines.append(line) }
+            }
+            self.exitCode = code
+        } catch {
+            self.error = error.localizedDescription
+            self.exitCode = -1
+        }
+        self.isRunning = false
+        return self.exitCode ?? -1
+    }
+
     func cancel() {
         task?.cancel()
         task = nil

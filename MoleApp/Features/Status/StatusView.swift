@@ -242,13 +242,21 @@ struct StatusView: View {
                 } else {
                     ForEach(gpus.indices, id: \.self) { i in
                         let g = gpus[i]
-                        let tone = StatusTone.forUsage(g.usage)
+                        // powermetrics requires root; when unauthorized the
+                        // CLI returns -1, which we must not render as "-1%".
+                        let usageAvailable = g.usage >= 0
+                        let tone = StatusTone.forUsage(max(0, g.usage))
                         VStack(alignment: .leading, spacing: 4) {
                             Text(g.name).font(.system(size: 12, weight: .medium))
                             HStack {
-                                ProgressBar(value: g.usage, tone: tone)
-                                Text(ByteFormatter.percent(g.usage)).font(.system(size: 11, design: .rounded))
-                                    .frame(width: 44, alignment: .trailing)
+                                ProgressBar(value: usageAvailable ? g.usage : 0, tone: tone)
+                                    .opacity(usageAvailable ? 1 : 0.3)
+                                Text(usageAvailable
+                                     ? ByteFormatter.percent(g.usage)
+                                     : loc.t("需要授权", "Auth required"))
+                                    .font(.system(size: 11, design: .rounded))
+                                    .frame(width: 80, alignment: .trailing)
+                                    .foregroundColor(usageAvailable ? .primary : .secondary)
                             }
                             if g.memoryTotal > 0 {
                                 Text(loc.t("\(ByteFormatter.bytes(g.memoryUsed)) / \(ByteFormatter.bytes(g.memoryTotal)) VRAM", "\(ByteFormatter.bytes(g.memoryUsed)) / \(ByteFormatter.bytes(g.memoryTotal)) VRAM"))
@@ -262,7 +270,11 @@ struct StatusView: View {
     }
 
     private func thermalCard(_ t: ThermalStatus, _ snap: StatusSnapshot) -> some View {
-        let tone: StatusTone = t.cpuTemp > 90 ? .critical : (t.cpuTemp > 75 ? .warn : .good)
+        // collectThermal() does not synthesize CPU temp without root access,
+        // so cpuTemp == 0 means "unavailable", not "0°C". Treat it as neutral.
+        let cpuTempAvailable = t.cpuTemp > 0
+        let tone: StatusTone = !cpuTempAvailable ? .neutral
+            : (t.cpuTemp > 90 ? .critical : (t.cpuTemp > 75 ? .warn : .good))
         return Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
@@ -274,7 +286,9 @@ struct StatusView: View {
                     }
                 }
                 HStack(spacing: 18) {
-                    metric(loc.t("CPU", "CPU"), String(format: "%.0f°C", t.cpuTemp), tone: tone)
+                    metric(loc.t("CPU", "CPU"),
+                           cpuTempAvailable ? String(format: "%.0f°C", t.cpuTemp) : loc.t("N/A", "N/A"),
+                           tone: tone)
                     if t.gpuTemp > 0 { metric(loc.t("GPU", "GPU"), String(format: "%.0f°C", t.gpuTemp), tone: .neutral) }
                     if snap.batteries?.first != nil {
                         metric(loc.t("电池", "Battery"), String(format: "%.0f°C", t.batteryTemp), tone: .neutral)
