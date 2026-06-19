@@ -5,9 +5,12 @@ struct AnalyzeResult: Codable, Hashable {
     var path: String
     var overview: Bool
     var entries: [AnalyzeEntry]
-    var largeFiles: [AnalyzeFileEntry]
+    /// `large_files` and `total_files` are emitted with `omitempty` by the Go
+    /// CLI; they are absent in overview mode (only directory scans populate
+    /// them).
+    var largeFiles: [AnalyzeFileEntry]?
     var totalSize: Int64
-    var totalFiles: Int64
+    var totalFiles: Int64?
 
     enum CodingKeys: String, CodingKey {
         case path, overview, entries

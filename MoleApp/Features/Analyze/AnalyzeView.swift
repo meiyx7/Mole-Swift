@@ -105,8 +105,8 @@ struct AnalyzeView: View {
                 header(result)
                 summaryRow(result)
                 entriesSection(result)
-                if !result.largeFiles.isEmpty {
-                    largeFilesSection(result.largeFiles, total: result.totalSize)
+                if let largeFiles = result.largeFiles, !largeFiles.isEmpty {
+                    largeFilesSection(largeFiles, total: result.totalSize)
                 }
             }
         }
@@ -120,7 +120,7 @@ struct AnalyzeView: View {
                 : breadcrumb(result.path),
             systemImage: "chart.pie",
             trailing: AnyView(
-                Text(loc.t("\(result.totalFiles > 0 ? "\(result.totalFiles) 项 · " : "")\(ByteFormatter.bytes(result.totalSize))", "\(result.totalFiles > 0 ? "\(result.totalFiles) items · " : "")\(ByteFormatter.bytes(result.totalSize))"))
+                Text(loc.t("\((result.totalFiles ?? 0) > 0 ? "\(result.totalFiles!) 项 · " : "")\(ByteFormatter.bytes(result.totalSize))", "\((result.totalFiles ?? 0) > 0 ? "\(result.totalFiles!) items · " : "")\(ByteFormatter.bytes(result.totalSize))"))
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundColor(.secondary)
             )
@@ -141,12 +141,12 @@ struct AnalyzeView: View {
         return HStack(spacing: 14) {
             StatTile(title: loc.t("总大小", "Total Size"), value: ByteFormatter.bytes(result.totalSize),
                      systemImage: "externaldrive", tone: .neutral)
-            StatTile(title: loc.t("项目", "Items"), value: result.totalFiles > 0 ? "\(result.totalFiles)" : "\(result.entries.count)",
+            StatTile(title: loc.t("项目", "Items"), value: (result.totalFiles ?? 0) > 0 ? "\(result.totalFiles!)" : "\(result.entries.count)",
                      systemImage: "doc.on.doc", tone: .neutral)
             StatTile(title: loc.t("可清理", "Cleanable"), value: ByteFormatter.bytes(cleanable),
                      systemImage: "sparkles", tone: cleanable > 0 ? .good : .neutral)
-            StatTile(title: loc.t("大文件", "Large Files"), value: "\(result.largeFiles.count)",
-                     systemImage: "exclamationmark.triangle", tone: result.largeFiles.isEmpty ? .neutral : .warn)
+            StatTile(title: loc.t("大文件", "Large Files"), value: "\(result.largeFiles?.count ?? 0)",
+                     systemImage: "exclamationmark.triangle", tone: (result.largeFiles?.isEmpty ?? true) ? .neutral : .warn)
         }
     }
 
