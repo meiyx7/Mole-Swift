@@ -143,10 +143,10 @@ struct UninstallView: View {
                 }
             } message: { entry in
                 Text(permanent
-                     ? loc.t("永久模式将立即删除"\(entry.name)"及其所有关联文件。此操作不可撤销。",
-                             "Permanent mode removes "\(entry.name)" and all associated files immediately. This cannot be undone.")
-                     : loc.t("Mole 将把"\(entry.name)"移至废纸篓并删除其支持文件。此操作不可撤销。",
-                             "Mole will move "\(entry.name)" to Trash and remove its support files. This cannot be undone."))
+                     ? loc.t("永久模式将立即删除\"\(entry.name)\"及其所有关联文件。此操作不可撤销。",
+                             "Permanent mode removes \"\(entry.name)\" and all associated files immediately. This cannot be undone.")
+                     : loc.t("Mole 将把\"\(entry.name)\"移至废纸篓并删除其支持文件。此操作不可撤销。",
+                             "Mole will move \"\(entry.name)\" to Trash and remove its support files. This cannot be undone."))
             }
             .task { if vm.apps.isEmpty { await vm.load() } }
             .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
@@ -322,7 +322,7 @@ struct UninstallView: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .help(loc.t("卸载"\(entry.name)"", "Uninstall "\(entry.name)""))
+                .help(loc.t("卸载\"\(entry.name)\"", "Uninstall \"\(entry.name)\""))
                 .disabled(runner.isRunning)
             }
         }
@@ -443,7 +443,7 @@ struct UninstallView: View {
                 vm.removeEntry(entry)
                 feedback = FeedbackMessage(
                     isSuccess: true,
-                    text: loc.t("已卸载"\(entry.name)"。", "Uninstalled "\(entry.name)".")
+                    text: loc.t("已卸载\"\(entry.name)\"。", "Uninstalled \"\(entry.name)\".")
                 )
             } else {
                 let detail = runner.error ?? (code == 0
