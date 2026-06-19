@@ -2,7 +2,8 @@ import SwiftUI
 
 /// A reusable screen for the preview → confirm → run cleanup commands
 /// (Optimize, Purge, Installer). Each provides its title, categories, and the
-/// two service calls; this view handles the lifecycle and console output.
+/// two service calls; this view handles the lifecycle, the visual preview, and
+/// the raw console fallback.
 struct CleanupScreen: View {
     let title: String
     let subtitle: String
@@ -17,15 +18,25 @@ struct CleanupScreen: View {
     @StateObject private var runner = CommandRunner()
     @State private var phase: Phase = .idle
     @State private var showConfirm = false
+    @State private var showRawConsole = false
 
     private enum Phase: Equatable { case idle, previewing, previewed, running, done }
+
+    private var parsed: PreviewParser.Summary {
+        PreviewParser.parse(runner.lines.map { $0.text })
+    }
+
+    private var hasVisualContent: Bool {
+        !parsed.entries.isEmpty
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                stepGuide
                 categoriesCard
-                consoleCard
+                previewCard
             }
         }
         .featurePadding()
@@ -46,6 +57,51 @@ struct CleanupScreen: View {
             trailing: AnyView(actionButtons)
         )
     }
+
+    // MARK: - Step guide
+
+    /// A compact 3-step banner so the user always knows the flow:
+    /// 1. Preview  2. Review  3. Confirm & Run.
+    private var stepGuide: some View {
+        HStack(spacing: 10) {
+            stepDot(1, label: loc.t("预览", "Preview"), active: phase == .idle || phase == .previewing, done: phaseIsAfterPreview)
+            stepConnector(active: phaseIsAfterPreview)
+            stepDot(2, label: loc.t("查看", "Review"), active: phase == .previewed, done: phase == .running || phase == .done)
+            stepConnector(active: phase == .running || phase == .done)
+            stepDot(3, label: loc.t("执行", "Run"), active: phase == .running, done: phase == .done)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var phaseIsAfterPreview: Bool {
+        phase == .previewed || phase == .running || phase == .done
+    }
+
+    private func stepDot(_ n: Int, label: String, active: Bool, done: Bool) -> some View {
+        HStack(spacing: 6) {
+            ZStack {
+                Circle().fill(done ? Theme.color(for: .good) : (active ? Theme.accent : Color.secondary.opacity(0.3)))
+                    .frame(width: 18, height: 18)
+                if done {
+                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundColor(.white)
+                } else {
+                    Text("\(n)").font(.system(size: 10, weight: .bold)).foregroundColor(.white)
+                }
+            }
+            Text(label).font(.system(size: 11, weight: done || active ? .semibold : .regular))
+                .foregroundColor(done || active ? .primary : .secondary)
+        }
+    }
+
+    private func stepConnector(active: Bool) -> some View {
+        Rectangle()
+            .fill(active ? Theme.color(for: .good) : Color.secondary.opacity(0.25))
+            .frame(height: 2)
+            .frame(maxWidth: 60)
+    }
+
+    // MARK: - Actions
 
     private var actionButtons: some View {
         HStack(spacing: 8) {
@@ -90,23 +146,45 @@ struct CleanupScreen: View {
         }
     }
 
-    private var consoleCard: some View {
+    // MARK: - Preview card (visual + raw console toggle)
+
+    private var previewCard: some View {
         Card(padding: 12) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Label(phaseLabel, systemImage: "terminal")
+                    Label(phaseLabel, systemImage: "sparkles.rectangle.stack")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     statusPill
+                    if runner.hasOutput {
+                        Button {
+                            showRawConsole.toggle()
+                        } label: {
+                            Image(systemName: showRawConsole ? "list.bullet.indent" : "terminal")
+                                .font(.system(size: 11))
+                                .help(loc.t("切换原始输出", "Toggle raw output"))
+                        }
+                        .buttonStyle(.borderless)
+                    }
                 }
+
                 if runner.lines.isEmpty && !runner.isRunning {
                     Text(previewHint)
                         .font(.system(size: 12)).foregroundColor(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
                         .multilineTextAlignment(.center)
-                } else {
+                } else if showRawConsole {
                     ConsoleOutputView(lines: runner.lines)
                         .frame(minHeight: 220, maxHeight: 360)
+                } else if hasVisualContent {
+                    PreviewSummaryView(summary: parsed, loc: loc)
+                } else {
+                    // Output exists but parser found no structured entries
+                    // (e.g. installer "No installer files to clean"). Show the
+                    // raw lines in a compact form so the user still sees what
+                    // happened.
+                    ConsoleOutputView(lines: runner.lines)
+                        .frame(minHeight: 120, maxHeight: 240)
                 }
             }
         }
@@ -114,7 +192,7 @@ struct CleanupScreen: View {
 
     private var phaseLabel: String {
         switch phase {
-        case .idle: return loc.t("输出", "Output")
+        case .idle: return loc.t("预览结果", "Preview")
         case .previewing: return loc.t("预览中（试运行）…", "Previewing (dry-run)…")
         case .previewed: return loc.t("预览完成", "Preview ready")
         case .running: return loc.t("运行中…", "Running…")

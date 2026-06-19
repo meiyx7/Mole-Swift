@@ -14,6 +14,7 @@ struct CleanView: View {
     @StateObject private var runner = CommandRunner()
     @State private var phase: Phase = .idle
     @State private var showConfirm = false
+    @State private var showRawConsole = false
 
     private enum Phase: Equatable {
         case idle, previewing, previewed, running, done
@@ -33,6 +34,14 @@ struct CleanView: View {
         ]
     }
 
+    private var parsed: PreviewParser.Summary {
+        PreviewParser.parse(runner.lines.map { $0.text })
+    }
+
+    private var hasVisualContent: Bool {
+        !parsed.entries.isEmpty
+    }
+
     var body: some View {
         if !service.isInstalled {
             CLIUnavailableView()
@@ -40,8 +49,9 @@ struct CleanView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header
+                    stepGuide
                     categoriesCard
-                    consoleCard
+                    previewCard
                 }
             }
             .featurePadding()
@@ -62,6 +72,49 @@ struct CleanView: View {
             systemImage: "sparkles",
             trailing: AnyView(actionButtons)
         )
+    }
+
+    // MARK: - Step guide
+
+    /// A compact 3-step banner so the user always knows the flow:
+    /// 1. Preview  2. Review  3. Confirm & Clean.
+    private var stepGuide: some View {
+        HStack(spacing: 10) {
+            stepDot(1, label: loc.t("预览", "Preview"), active: phase == .idle || phase == .previewing, done: phaseIsAfterPreview)
+            stepConnector(active: phaseIsAfterPreview)
+            stepDot(2, label: loc.t("查看", "Review"), active: phase == .previewed, done: phase == .running || phase == .done)
+            stepConnector(active: phase == .running || phase == .done)
+            stepDot(3, label: loc.t("清理", "Clean"), active: phase == .running, done: phase == .done)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var phaseIsAfterPreview: Bool {
+        phase == .previewed || phase == .running || phase == .done
+    }
+
+    private func stepDot(_ n: Int, label: String, active: Bool, done: Bool) -> some View {
+        HStack(spacing: 6) {
+            ZStack {
+                Circle().fill(done ? Theme.color(for: .good) : (active ? Theme.accent : Color.secondary.opacity(0.3)))
+                    .frame(width: 18, height: 18)
+                if done {
+                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundColor(.white)
+                } else {
+                    Text("\(n)").font(.system(size: 10, weight: .bold)).foregroundColor(.white)
+                }
+            }
+            Text(label).font(.system(size: 11, weight: done || active ? .semibold : .regular))
+                .foregroundColor(done || active ? .primary : .secondary)
+        }
+    }
+
+    private func stepConnector(active: Bool) -> some View {
+        Rectangle()
+            .fill(active ? Theme.color(for: .good) : Color.secondary.opacity(0.25))
+            .frame(height: 2)
+            .frame(maxWidth: 60)
     }
 
     private var actionButtons: some View {
@@ -113,22 +166,41 @@ struct CleanView: View {
         }
     }
 
-    private var consoleCard: some View {
+    // MARK: - Preview card (visual + raw console toggle)
+
+    private var previewCard: some View {
         Card(padding: 12) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Label(phaseLabel, systemImage: "terminal")
+                    Label(phaseLabel, systemImage: "sparkles.rectangle.stack")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     statusPill
+                    if runner.hasOutput {
+                        Button {
+                            showRawConsole.toggle()
+                        } label: {
+                            Image(systemName: showRawConsole ? "list.bullet.indent" : "terminal")
+                                .font(.system(size: 11))
+                                .help(loc.t("切换原始输出", "Toggle raw output"))
+                        }
+                        .buttonStyle(.borderless)
+                    }
                 }
+
                 if runner.lines.isEmpty && !runner.isRunning {
                     Text(loc.t("运行预览以查看 Mole 将精确删除的内容 — 安全且不会做任何更改。", "Run a preview to see exactly what Mole would remove — safely, with no changes made."))
                         .font(.system(size: 12)).foregroundColor(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
-                } else {
+                        .multilineTextAlignment(.center)
+                } else if showRawConsole {
                     ConsoleOutputView(lines: runner.lines)
                         .frame(minHeight: 220, maxHeight: 360)
+                } else if hasVisualContent {
+                    PreviewSummaryView(summary: parsed, loc: loc)
+                } else {
+                    ConsoleOutputView(lines: runner.lines)
+                        .frame(minHeight: 120, maxHeight: 240)
                 }
             }
         }
@@ -136,7 +208,7 @@ struct CleanView: View {
 
     private var phaseLabel: String {
         switch phase {
-        case .idle: return loc.t("输出", "Output")
+        case .idle: return loc.t("预览结果", "Preview")
         case .previewing: return loc.t("预览中（试运行）…", "Previewing (dry-run)…")
         case .previewed: return loc.t("预览完成", "Preview ready")
         case .running: return loc.t("清理中…", "Cleaning…")
@@ -155,7 +227,7 @@ struct CleanView: View {
             .background(.quaternary, in: Capsule())
         } else if let code = runner.exitCode {
             let tone: StatusTone = code == 0 ? .good : .critical
-            Text(code == 0 ? "✓ exit 0" : "exit \(code)")
+            Text(code == 0 ? loc.t("✓ 完成", "✓ exit 0") : loc.t("退出 \(code)", "exit \(code)"))
                 .font(.system(size: 10, weight: .semibold))
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Theme.color(for: tone).opacity(0.18), in: Capsule())
