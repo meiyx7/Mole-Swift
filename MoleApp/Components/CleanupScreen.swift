@@ -13,6 +13,7 @@ struct CleanupScreen: View {
     let preview: (@MainActor @escaping (CLIOutputLine) -> Void) async throws -> Int32
     let run: (@MainActor @escaping (CLIOutputLine) -> Void) async throws -> Int32
 
+    @EnvironmentObject private var loc: Localization
     @StateObject private var runner = CommandRunner()
     @State private var phase: Phase = .idle
     @State private var showConfirm = false
@@ -29,11 +30,11 @@ struct CleanupScreen: View {
         }
         .featurePadding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .alert("Run \(title.lowercased())?", isPresented: $showConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("Run", role: .destructive) { runNow() }
+        .alert(loc.t("运行\(title)？", "Run \(title.lowercased())?"), isPresented: $showConfirm) {
+            Button(loc.t("取消", "Cancel"), role: .cancel) {}
+            Button(loc.t("运行", "Run"), role: .destructive) { runNow() }
         } message: {
-            Text("This will apply the changes shown in the preview. Some steps may require an active sudo session.")
+            Text(loc.t("这将应用预览中显示的更改。某些步骤可能需要活动的 sudo 会话。", "This will apply the changes shown in the preview. Some steps may require an active sudo session."))
         }
     }
 
@@ -49,16 +50,16 @@ struct CleanupScreen: View {
     private var actionButtons: some View {
         HStack(spacing: 8) {
             if runner.isRunning {
-                Button("Stop", role: .destructive) { runner.cancel() }.buttonStyle(.bordered)
+                Button(loc.t("停止", "Stop"), role: .destructive) { runner.cancel() }.buttonStyle(.bordered)
             } else {
                 Button { Task { await runPreview() } } label: {
-                    Label("Preview", systemImage: "eye")
+                    Label(loc.t("预览", "Preview"), systemImage: "eye")
                 }
                 .buttonStyle(.bordered)
                 .disabled(phase == .previewing)
 
                 Button { showConfirm = true } label: {
-                    Label("Run", systemImage: systemImage)
+                    Label(loc.t("运行", "Run"), systemImage: systemImage)
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(!runner.hasOutput || phase == .running)
@@ -69,7 +70,7 @@ struct CleanupScreen: View {
     private var categoriesCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                Text("What this does")
+                Text(loc.t("功能说明", "What this does"))
                     .font(.system(size: 13, weight: .semibold))
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
                           spacing: 10) {
@@ -113,11 +114,11 @@ struct CleanupScreen: View {
 
     private var phaseLabel: String {
         switch phase {
-        case .idle: return "Output"
-        case .previewing: return "Previewing (dry-run)…"
-        case .previewed: return "Preview ready"
-        case .running: return "Running…"
-        case .done: return "Finished"
+        case .idle: return loc.t("输出", "Output")
+        case .previewing: return loc.t("预览中（试运行）…", "Previewing (dry-run)…")
+        case .previewed: return loc.t("预览完成", "Preview ready")
+        case .running: return loc.t("运行中…", "Running…")
+        case .done: return loc.t("已完成", "Finished")
         }
     }
 
@@ -125,13 +126,13 @@ struct CleanupScreen: View {
     private var statusPill: some View {
         if runner.isRunning {
             HStack(spacing: 5) {
-                ProgressView().controlSize(.mini); Text("running").font(.system(size: 10))
+                ProgressView().controlSize(.mini); Text(loc.t("运行中", "running")).font(.system(size: 10))
             }
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(.quaternary, in: Capsule())
         } else if let code = runner.exitCode {
             let tone: StatusTone = code == 0 ? .good : .critical
-            Text(code == 0 ? "✓ exit 0" : "exit \(code)")
+            Text(code == 0 ? loc.t("✓ 完成", "✓ exit 0") : loc.t("退出 \(code)", "exit \(code)"))
                 .font(.system(size: 10, weight: .semibold))
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Theme.color(for: tone).opacity(0.18), in: Capsule())

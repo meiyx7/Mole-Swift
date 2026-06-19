@@ -52,6 +52,7 @@ final class AnalyzeViewModel: ObservableObject {
 struct AnalyzeView: View {
     @StateObject private var vm = AnalyzeViewModel()
     @EnvironmentObject private var service: MoleService
+    @EnvironmentObject private var loc: Localization
 
     var body: some View {
         Group {
@@ -60,17 +61,17 @@ struct AnalyzeView: View {
             } else if let result = vm.result {
                 content(result)
             } else if vm.isLoading {
-                LoadingView(title: "Scanning disk usage…")
+                LoadingView(title: loc.t("正在扫描磁盘占用…", "Scanning disk usage…"))
             } else if let error = vm.error {
                 EmptyStateView(systemImage: "exclamationmark.triangle",
-                               title: "Scan failed",
+                               title: loc.t("扫描失败", "Scan failed"),
                                message: error,
-                               action: ("Retry", { Task { await vm.refresh() } }))
+                               action: (loc.t("重试", "Retry"), { Task { await vm.refresh() } }))
             } else {
                 EmptyStateView(systemImage: "chart.pie",
-                               title: "Disk Explorer",
-                               message: "Visualise what's taking up space on your Mac.",
-                               action: ("Scan Home folder", { Task { await vm.loadOverview() } }))
+                               title: loc.t("磁盘分析", "Disk Explorer"),
+                               message: loc.t("可视化查看 Mac 上的空间占用。", "Visualise what's taking up space on your Mac."),
+                               action: (loc.t("扫描主目录", "Scan Home folder"), { Task { await vm.loadOverview() } }))
             }
         }
         .featurePadding()
@@ -81,14 +82,14 @@ struct AnalyzeView: View {
                     Button { Task { await vm.goBack() } } label: {
                         Image(systemName: "chevron.left")
                     }
-                    .help("Back")
+                    .help(loc.t("返回", "Back"))
                 }
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { Task { await vm.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .help("Rescan")
+                .help(loc.t("重新扫描", "Rescan"))
             }
         }
         .task { if vm.result == nil { await vm.loadOverview() } }
@@ -113,13 +114,13 @@ struct AnalyzeView: View {
 
     private func header(_ result: AnalyzeResult) -> some View {
         FeatureHeader(
-            title: "Disk Explorer",
+            title: loc.t("磁盘分析", "Disk Explorer"),
             subtitle: vm.isOverview
-                ? "Overview of your Home folder"
+                ? loc.t("主目录概览", "Overview of your Home folder")
                 : breadcrumb(result.path),
             systemImage: "chart.pie",
             trailing: AnyView(
-                Text("\(result.totalFiles > 0 ? "\(result.totalFiles) items · " : "")\(ByteFormatter.bytes(result.totalSize))")
+                Text(loc.t("\(result.totalFiles > 0 ? "\(result.totalFiles) 项 · " : "")\(ByteFormatter.bytes(result.totalSize))", "\(result.totalFiles > 0 ? "\(result.totalFiles) items · " : "")\(ByteFormatter.bytes(result.totalSize))"))
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundColor(.secondary)
             )
@@ -138,13 +139,13 @@ struct AnalyzeView: View {
     private func summaryRow(_ result: AnalyzeResult) -> some View {
         let cleanable = result.entries.filter { $0.cleanable }.reduce(Int64(0)) { $0 + $1.size }
         return HStack(spacing: 14) {
-            StatTile(title: "Total Size", value: ByteFormatter.bytes(result.totalSize),
+            StatTile(title: loc.t("总大小", "Total Size"), value: ByteFormatter.bytes(result.totalSize),
                      systemImage: "externaldrive", tone: .neutral)
-            StatTile(title: "Items", value: result.totalFiles > 0 ? "\(result.totalFiles)" : "\(result.entries.count)",
+            StatTile(title: loc.t("项目", "Items"), value: result.totalFiles > 0 ? "\(result.totalFiles)" : "\(result.entries.count)",
                      systemImage: "doc.on.doc", tone: .neutral)
-            StatTile(title: "Cleanable", value: ByteFormatter.bytes(cleanable),
+            StatTile(title: loc.t("可清理", "Cleanable"), value: ByteFormatter.bytes(cleanable),
                      systemImage: "sparkles", tone: cleanable > 0 ? .good : .neutral)
-            StatTile(title: "Large Files", value: "\(result.largeFiles.count)",
+            StatTile(title: loc.t("大文件", "Large Files"), value: "\(result.largeFiles.count)",
                      systemImage: "exclamationmark.triangle", tone: result.largeFiles.isEmpty ? .neutral : .warn)
         }
     }
@@ -152,7 +153,7 @@ struct AnalyzeView: View {
     private func entriesSection(_ result: AnalyzeResult) -> some View {
         Card(padding: 10) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Breakdown")
+                Text(loc.t("明细", "Breakdown"))
                     .font(.system(size: 13, weight: .semibold))
                     .padding(.horizontal, 6).padding(.bottom, 4)
                 let max = result.entries.map { $0.size }.max() ?? 1
@@ -179,9 +180,9 @@ struct AnalyzeView: View {
                     HStack {
                         Text(entry.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                         if entry.cleanable {
-                            badge("Cleanable", tone: .good)
+                            badge(loc.t("可清理", "Cleanable"), tone: .good)
                         } else if entry.insight {
-                            badge("Insight", tone: .warn)
+                            badge(loc.t("洞察", "Insight"), tone: .warn)
                         }
                         Spacer()
                         Text(ByteFormatter.bytes(entry.size))
@@ -201,7 +202,7 @@ struct AnalyzeView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }.frame(height: 6)
                     if !entry.lastAccess.isEmpty {
-                        Text("Last access \(entry.lastAccess)")
+                        Text(loc.t("最近访问 ", "Last access ") + entry.lastAccess)
                             .font(.system(size: 10, design: .rounded)).foregroundColor(Color.gray.opacity(0.5))
                     }
                 }
@@ -225,10 +226,10 @@ struct AnalyzeView: View {
         Card(padding: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Label("Large Files", systemImage: "exclamationmark.triangle.fill")
+                    Label(loc.t("大文件", "Large Files"), systemImage: "exclamationmark.triangle.fill")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
-                    Text("Top space hogs").font(.system(size: 10)).foregroundColor(.secondary)
+                    Text(loc.t("占用最高的文件", "Top space hogs")).font(.system(size: 10)).foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 6).padding(.bottom, 4)
                 let max = files.map { $0.size }.max() ?? 1

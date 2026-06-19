@@ -45,6 +45,7 @@ final class UninstallViewModel: ObservableObject {
 
 struct UninstallView: View {
     @EnvironmentObject private var service: MoleService
+    @EnvironmentObject private var loc: Localization
     @StateObject private var vm = UninstallViewModel()
     @StateObject private var runner = CommandRunner()
     @State private var permanent = false
@@ -60,15 +61,15 @@ struct UninstallView: View {
                         header
                         if let error = vm.error {
                             EmptyStateView(systemImage: "exclamationmark.triangle",
-                                           title: "Couldn't list apps",
+                                           title: loc.t("无法列出应用", "Couldn't list apps"),
                                            message: error,
-                                           action: ("Retry", { Task { await vm.load() } }))
+                                           action: (loc.t("重试", "Retry"), { Task { await vm.load() } }))
                         } else if vm.apps.isEmpty && vm.isLoading {
-                            LoadingView(title: "Scanning applications…")
+                            LoadingView(title: loc.t("正在扫描应用…", "Scanning applications…"))
                         } else if vm.apps.isEmpty {
                             EmptyStateView(systemImage: "app.dashed",
-                                           title: "No applications found",
-                                           message: "Mole couldn't find any apps to uninstall.")
+                                           title: loc.t("未找到应用", "No applications found"),
+                                           message: loc.t("Mole 未找到可卸载的应用。", "Mole couldn't find any apps to uninstall."))
                         } else {
                             listCard
                             if runner.hasOutput || runner.isRunning { consoleCard }
@@ -81,16 +82,16 @@ struct UninstallView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button { Task { await vm.load() } } label: { Image(systemName: "arrow.clockwise") }
-                        .help("Rescan apps")
+                        .help(loc.t("重新扫描应用", "Rescan apps"))
                 }
             }
-            .alert("Uninstall \(vm.selected.count) app\(vm.selected.count == 1 ? "" : "s")?", isPresented: $showConfirm) {
-                Button("Cancel", role: .cancel) {}
-                Button("Uninstall", role: .destructive) { runUninstall() }
+            .alert(loc.t("卸载 \(vm.selected.count) 个应用？", "Uninstall \(vm.selected.count) app\(vm.selected.count == 1 ? "" : "s")?"), isPresented: $showConfirm) {
+                Button(loc.t("取消", "Cancel"), role: .cancel) {}
+                Button(loc.t("卸载", "Uninstall"), role: .destructive) { runUninstall() }
             } message: {
                 Text(permanent
-                     ? "Permanent mode removes apps and all associated files immediately. This cannot be undone."
-                     : "Mole will move the selected apps to Trash and remove their support files. This cannot be undone.")
+                     ? loc.t("永久模式将立即删除应用及其所有关联文件。此操作不可撤销。", "Permanent mode removes apps and all associated files immediately. This cannot be undone.")
+                     : loc.t("Mole 将把所选应用移至废纸篓并删除其支持文件。此操作不可撤销。", "Mole will move the selected apps to Trash and remove their support files. This cannot be undone."))
             }
             .task { if vm.apps.isEmpty { await vm.load() } }
             .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
@@ -101,19 +102,19 @@ struct UninstallView: View {
 
     private var header: some View {
         FeatureHeader(
-            title: "Uninstall Apps",
-            subtitle: "Remove applications completely, including leftover support files.",
+            title: loc.t("卸载应用", "Uninstall Apps"),
+            subtitle: loc.t("彻底移除应用程序，包括残留的支持文件。", "Remove applications completely, including leftover support files."),
             systemImage: "trash.slash",
             trailing: AnyView(
                 HStack(spacing: 8) {
-                    Toggle("Permanent", isOn: $permanent)
+                    Toggle(loc.t("永久删除", "Permanent"), isOn: $permanent)
                         .toggleStyle(.switch)
                         .controlSize(.small)
-                        .help("Bypass Trash and delete immediately")
+                        .help(loc.t("跳过废纸篓并立即删除", "Bypass Trash and delete immediately"))
                     Button {
                         showConfirm = true
                     } label: {
-                        Label("Uninstall", systemImage: "trash")
+                        Label(loc.t("卸载", "Uninstall"), systemImage: "trash")
                     }
                     .buttonStyle(PrimaryButtonStyle(tint: .red))
                     .disabled(vm.selected.isEmpty || runner.isRunning)
@@ -126,11 +127,11 @@ struct UninstallView: View {
         Card(padding: 8) {
             VStack(spacing: 0) {
                 HStack {
-                    Text("\(vm.apps.count) apps · \(vm.selected.count) selected")
+                    Text(loc.t("\(vm.apps.count) 应用 · \(vm.selected.count) 已选", "\(vm.apps.count) apps · \(vm.selected.count) selected"))
                         .font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
                     Spacer()
-                    Button("Select All") { vm.selectAll() }.buttonStyle(.borderless).font(.system(size: 11))
-                    Button("Clear") { vm.clearSelection() }.buttonStyle(.borderless).font(.system(size: 11))
+                    Button(loc.t("全选", "Select All")) { vm.selectAll() }.buttonStyle(.borderless).font(.system(size: 11))
+                    Button(loc.t("清空", "Clear")) { vm.clearSelection() }.buttonStyle(.borderless).font(.system(size: 11))
                 }
                 .padding(.horizontal, 8).padding(.vertical, 8)
 
@@ -156,7 +157,7 @@ struct UninstallView: View {
                     HStack(spacing: 6) {
                         Text(entry.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                         if entry.isHomebrew {
-                            Text("Homebrew")
+                            Text(loc.t("Homebrew", "Homebrew"))
                                 .font(.system(size: 9, weight: .semibold))
                                 .padding(.horizontal, 5).padding(.vertical, 1)
                                 .background(Color.orange.opacity(0.18), in: Capsule())
@@ -192,11 +193,11 @@ struct UninstallView: View {
         Card(padding: 12) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Label(runner.isRunning ? "Uninstalling…" : "Output", systemImage: "terminal")
+                    Label(runner.isRunning ? loc.t("正在卸载…", "Uninstalling…") : loc.t("输出", "Output"), systemImage: "terminal")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     if let code = runner.exitCode {
-                        Text(code == 0 ? "✓ done" : "exit \(code)")
+                        Text(code == 0 ? loc.t("✓ 完成", "✓ done") : "exit \(code)")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundColor(code == 0 ? .green : .red)
                     }

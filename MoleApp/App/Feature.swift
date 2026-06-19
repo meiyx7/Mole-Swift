@@ -14,31 +14,31 @@ enum Feature: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
-    var title: String {
+    func title(_ loc: Localization) -> String {
         switch self {
-        case .status: return "Status"
-        case .analyze: return "Disk Explorer"
-        case .clean: return "Clean"
-        case .uninstall: return "Uninstall Apps"
-        case .optimize: return "Optimize"
-        case .purge: return "Purge Projects"
-        case .installer: return "Installer Files"
-        case .history: return "History"
-        case .settings: return "Settings"
+        case .status: return loc.t("系统状态", "Status")
+        case .analyze: return loc.t("磁盘分析", "Disk Explorer")
+        case .clean: return loc.t("清理", "Clean")
+        case .uninstall: return loc.t("卸载应用", "Uninstall Apps")
+        case .optimize: return loc.t("优化", "Optimize")
+        case .purge: return loc.t("清理项目", "Purge Projects")
+        case .installer: return loc.t("安装包", "Installer Files")
+        case .history: return loc.t("历史记录", "History")
+        case .settings: return loc.t("设置", "Settings")
         }
     }
 
-    var subtitle: String {
+    func subtitle(_ loc: Localization) -> String {
         switch self {
-        case .status: return "Live system health"
-        case .analyze: return "Visual disk usage"
-        case .clean: return "Deep cleanup"
-        case .uninstall: return "Remove applications"
-        case .optimize: return "Refresh caches & services"
-        case .purge: return "Reclaim build artifacts"
-        case .installer: return "Find leftover installers"
-        case .history: return "Cleanup activity"
-        case .settings: return "Touch ID, updates & more"
+        case .status: return loc.t("实时系统健康", "Live system health")
+        case .analyze: return loc.t("可视化磁盘占用", "Visual disk usage")
+        case .clean: return loc.t("深度清理", "Deep cleanup")
+        case .uninstall: return loc.t("移除应用程序", "Remove applications")
+        case .optimize: return loc.t("刷新缓存与服务", "Refresh caches & services")
+        case .purge: return loc.t("回收构建产物", "Reclaim build artifacts")
+        case .installer: return loc.t("查找残留安装包", "Find leftover installers")
+        case .history: return loc.t("清理活动记录", "Cleanup activity")
+        case .settings: return loc.t("Touch ID、更新等", "Touch ID, updates & more")
         }
     }
 
@@ -59,12 +59,21 @@ enum Feature: String, CaseIterable, Identifiable, Hashable {
 
 /// Logical grouping used to render sidebar sections.
 enum FeatureSection: String, CaseIterable, Identifiable {
-    case overview = "Overview"
-    case cleanup = "Cleanup"
-    case management = "Management"
-    case system = "System"
+    case overview
+    case cleanup
+    case management
+    case system
 
     var id: String { rawValue }
+
+    func title(_ loc: Localization) -> String {
+        switch self {
+        case .overview: return loc.t("概览", "Overview")
+        case .cleanup: return loc.t("清理", "Cleanup")
+        case .management: return loc.t("管理", "Management")
+        case .system: return loc.t("系统", "System")
+        }
+    }
 
     var features: [Feature] {
         switch self {

@@ -40,6 +40,7 @@ final class StatusViewModel: ObservableObject {
 struct StatusView: View {
     @StateObject private var vm = StatusViewModel()
     @EnvironmentObject private var service: MoleService
+    @EnvironmentObject private var loc: Localization
 
     var body: some View {
         Group {
@@ -48,17 +49,17 @@ struct StatusView: View {
             } else if let snap = vm.snapshot {
                 content(snap)
             } else if vm.isLoading {
-                LoadingView(title: "Reading system metrics…")
+                LoadingView(title: loc.t("正在读取系统指标…", "Reading system metrics…"))
             } else if let error = vm.error {
                 EmptyStateView(systemImage: "exclamationmark.triangle",
-                               title: "Couldn't load status",
+                               title: loc.t("无法加载状态", "Couldn't load status"),
                                message: error,
-                               action: ("Retry", { Task { await vm.load() } }))
+                               action: (loc.t("重试", "Retry"), { Task { await vm.load() } }))
             } else {
                 EmptyStateView(systemImage: "heart.text.square",
-                               title: "System status",
-                               message: "Load a live snapshot of your Mac's health.",
-                               action: ("Load status", { Task { await vm.load() } }))
+                               title: loc.t("系统状态", "System status"),
+                               message: loc.t("加载 Mac 健康状态的实时快照。", "Load a live snapshot of your Mac's health."),
+                               action: (loc.t("加载状态", "Load status"), { Task { await vm.load() } }))
             }
         }
         .featurePadding()
@@ -69,15 +70,15 @@ struct StatusView: View {
                     get: { vm.isLive },
                     set: { $0 ? vm.startLive() : vm.stopLive() }
                 )) {
-                    Label(vm.isLive ? "Live" : "Paused", systemImage: vm.isLive ? "pause.fill" : "play.fill")
+                    Label(vm.isLive ? loc.t("实时", "Live") : loc.t("已暂停", "Paused"), systemImage: vm.isLive ? "pause.fill" : "play.fill")
                 }
-                .help("Toggle live refresh (every 3s)")
+                .help(loc.t("切换实时刷新（每 3 秒）", "Toggle live refresh (every 3s)"))
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { Task { await vm.load() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .help("Refresh now")
+                .help(loc.t("立即刷新", "Refresh now"))
             }
         }
         .task { await vm.load() }
@@ -104,8 +105,8 @@ struct StatusView: View {
 
     private func header(_ snap: StatusSnapshot) -> some View {
         FeatureHeader(
-            title: "System Status",
-            subtitle: "\(snap.hardware.model) · \(snap.hardware.osVersion) · up \(snap.uptime)",
+            title: loc.t("系统状态", "System Status"),
+            subtitle: loc.t("\(snap.hardware.model) · \(snap.hardware.osVersion) · 运行 \(snap.uptime)", "\(snap.hardware.model) · \(snap.hardware.osVersion) · up \(snap.uptime)"),
             systemImage: "heart.text.square",
             trailing: AnyView(healthBadge(snap))
         )
@@ -114,9 +115,9 @@ struct StatusView: View {
     private func healthBadge(_ snap: StatusSnapshot) -> some View {
         let tone = StatusTone.forHealthScore(snap.healthScore)
         return HStack(spacing: 10) {
-            RingGauge(value: Double(snap.healthScore), label: "Health", tone: tone, size: 64)
+            RingGauge(value: Double(snap.healthScore), label: loc.t("健康", "Health"), tone: tone, size: 64)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Health Score")
+                Text(loc.t("健康评分", "Health Score"))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                     .textCase(.uppercase)
@@ -143,16 +144,16 @@ struct StatusView: View {
         return Card {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Label("CPU", systemImage: "cpu")
+                    Label(loc.t("CPU", "CPU"), systemImage: "cpu")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
-                    Text("\(cpu.logicalCPU) threads · \(cpu.coreCount) cores")
+                    Text(loc.t("\(cpu.logicalCPU) 线程 · \(cpu.coreCount) 核心", "\(cpu.logicalCPU) threads · \(cpu.coreCount) cores"))
                         .font(.system(size: 11)).foregroundColor(.secondary)
                 }
                 HStack(alignment: .center, spacing: 16) {
-                    RingGauge(value: cpu.usage, label: "CPU", tone: tone, size: 76)
+                    RingGauge(value: cpu.usage, label: loc.t("CPU", "CPU"), tone: tone, size: 76)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(ByteFormatter.percent(cpu.usage) + " used")
+                        Text(ByteFormatter.percent(cpu.usage) + loc.t("已使用", " used"))
                             .font(.system(size: 15, weight: .semibold))
                         HStack(spacing: 14) {
                             Label("\(String(format: "%.2f", cpu.load1))", systemImage: "1.circle")
@@ -175,7 +176,7 @@ struct StatusView: View {
         let maxCores = 16
         let shown = Array(cores.prefix(maxCores))
         return VStack(alignment: .leading, spacing: 4) {
-            Text("Per-core usage")
+            Text(loc.t("各核心使用率", "Per-core usage"))
                 .font(.system(size: 10)).foregroundColor(.secondary).textCase(.uppercase)
             HStack(alignment: .bottom, spacing: 3) {
                 ForEach(shown.indices, id: \.self) { i in
@@ -195,7 +196,7 @@ struct StatusView: View {
         return Card {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Label("Memory", systemImage: "memorychip")
+                    Label(loc.t("内存", "Memory"), systemImage: "memorychip")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     Text(mem.pressure.uppercased())
@@ -205,15 +206,15 @@ struct StatusView: View {
                         .foregroundColor(Theme.color(for: tone))
                 }
                 HStack(alignment: .center, spacing: 16) {
-                    RingGauge(value: mem.usedPercent, label: "RAM", tone: tone, size: 76)
+                    RingGauge(value: mem.usedPercent, label: loc.t("内存", "RAM"), tone: tone, size: 76)
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("\(ByteFormatter.bytes(mem.used)) of \(ByteFormatter.bytes(mem.total))")
+                        Text(loc.t("\(ByteFormatter.bytes(mem.used)) / \(ByteFormatter.bytes(mem.total))", "\(ByteFormatter.bytes(mem.used)) of \(ByteFormatter.bytes(mem.total))"))
                             .font(.system(size: 14, weight: .semibold))
                         ProgressBar(value: mem.usedPercent, tone: tone)
                         HStack(spacing: 14) {
-                            Text("Free \(ByteFormatter.bytes(mem.available))")
+                            Text(loc.t("可用 \(ByteFormatter.bytes(mem.available))", "Free \(ByteFormatter.bytes(mem.available))"))
                             if mem.swapTotal > 0 {
-                                Text("Swap \(ByteFormatter.bytes(mem.swapUsed))")
+                                Text(loc.t("交换 \(ByteFormatter.bytes(mem.swapUsed))", "Swap \(ByteFormatter.bytes(mem.swapUsed))"))
                             }
                         }
                         .font(.system(size: 11, design: .rounded)).foregroundColor(.secondary)
@@ -228,15 +229,15 @@ struct StatusView: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("GPU", systemImage: "rectangle.stack")
+                    Label(loc.t("GPU", "GPU"), systemImage: "rectangle.stack")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     if gpus.isEmpty {
-                        Text("No discrete GPU").font(.system(size: 11)).foregroundColor(.secondary)
+                        Text(loc.t("无独立显卡", "No discrete GPU")).font(.system(size: 11)).foregroundColor(.secondary)
                     }
                 }
                 if gpus.isEmpty {
-                    Text("Integrated graphics only on this Mac.")
+                    Text(loc.t("此 Mac 仅有集成显卡。", "Integrated graphics only on this Mac."))
                         .font(.system(size: 12)).foregroundColor(.secondary)
                 } else {
                     ForEach(gpus.indices, id: \.self) { i in
@@ -250,7 +251,7 @@ struct StatusView: View {
                                     .frame(width: 44, alignment: .trailing)
                             }
                             if g.memoryTotal > 0 {
-                                Text("\(ByteFormatter.bytes(g.memoryUsed)) / \(ByteFormatter.bytes(g.memoryTotal)) VRAM")
+                                Text(loc.t("\(ByteFormatter.bytes(g.memoryUsed)) / \(ByteFormatter.bytes(g.memoryTotal)) VRAM", "\(ByteFormatter.bytes(g.memoryUsed)) / \(ByteFormatter.bytes(g.memoryTotal)) VRAM"))
                                     .font(.system(size: 10, design: .rounded)).foregroundColor(.secondary)
                             }
                         }
@@ -265,26 +266,26 @@ struct StatusView: View {
         return Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Thermal & Power", systemImage: "thermometer.medium")
+                    Label(loc.t("温度与电源", "Thermal & Power"), systemImage: "thermometer.medium")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     if t.fanCount > 0 {
-                        Text("\(t.fanSpeed) RPM").font(.system(size: 11, design: .rounded)).foregroundColor(.secondary)
+                        Text(loc.t("\(t.fanSpeed) RPM", "\(t.fanSpeed) RPM")).font(.system(size: 11, design: .rounded)).foregroundColor(.secondary)
                     }
                 }
                 HStack(spacing: 18) {
-                    metric("CPU", String(format: "%.0f°C", t.cpuTemp), tone: tone)
-                    if t.gpuTemp > 0 { metric("GPU", String(format: "%.0f°C", t.gpuTemp), tone: .neutral) }
+                    metric(loc.t("CPU", "CPU"), String(format: "%.0f°C", t.cpuTemp), tone: tone)
+                    if t.gpuTemp > 0 { metric(loc.t("GPU", "GPU"), String(format: "%.0f°C", t.gpuTemp), tone: .neutral) }
                     if snap.batteries.first != nil {
-                        metric("Battery", String(format: "%.0f°C", t.batteryTemp), tone: .neutral)
+                        metric(loc.t("电池", "Battery"), String(format: "%.0f°C", t.batteryTemp), tone: .neutral)
                     }
                 }
                 if t.systemPower > 0 {
                     Divider()
                     HStack(spacing: 18) {
-                        metric("System", String(format: "%.1f W", t.systemPower), tone: .neutral)
-                        if t.adapterPower > 0 { metric("Adapter", String(format: "%.1f W", t.adapterPower), tone: .good) }
-                        if t.batteryPower > 0 { metric("Battery", String(format: "%.1f W", t.batteryPower), tone: .warn) }
+                        metric(loc.t("系统", "System"), String(format: "%.1f W", t.systemPower), tone: .neutral)
+                        if t.adapterPower > 0 { metric(loc.t("适配器", "Adapter"), String(format: "%.1f W", t.adapterPower), tone: .good) }
+                        if t.batteryPower > 0 { metric(loc.t("电池", "Battery"), String(format: "%.1f W", t.batteryPower), tone: .warn) }
                     }
                 }
             }
@@ -313,11 +314,11 @@ struct StatusView: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Storage", systemImage: "internaldrive")
+                    Label(loc.t("存储", "Storage"), systemImage: "internaldrive")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     if trash > 0 {
-                        Label("\(trashApprox ? "≈ " : "")\(ByteFormatter.bytes(trash)) in Trash", systemImage: "trash")
+                        Label(loc.t("\(trashApprox ? "≈ " : "")\(ByteFormatter.bytes(trash)) 废纸篓", "\(trashApprox ? "≈ " : "")\(ByteFormatter.bytes(trash)) in Trash"), systemImage: "trash")
                             .font(.system(size: 10)).foregroundColor(.secondary)
                     }
                 }
@@ -343,11 +344,11 @@ struct StatusView: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Network", systemImage: "network")
+                    Label(loc.t("网络", "Network"), systemImage: "network")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     if proxy.enabled {
-                        Text("Proxy: \(proxy.type)").font(.system(size: 10)).foregroundColor(.secondary)
+                        Text(loc.t("代理：\(proxy.type)", "Proxy: \(proxy.type)")).font(.system(size: 10)).foregroundColor(.secondary)
                     }
                 }
                 if !nets.isEmpty {
@@ -388,12 +389,12 @@ struct StatusView: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Battery", systemImage: "battery.100")
+                    Label(loc.t("电池", "Battery"), systemImage: "battery.100")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                 }
                 if batteries.isEmpty {
-                    Text("No battery detected (desktop Mac).")
+                    Text(loc.t("未检测到电池（台式机 Mac）。", "No battery detected (desktop Mac)."))
                         .font(.system(size: 12)).foregroundColor(.secondary)
                 } else {
                     ForEach(batteries.indices, id: \.self) { i in
@@ -406,7 +407,7 @@ struct StatusView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("\(Int(b.percent))% · \(b.status)")
                                     .font(.system(size: 13, weight: .semibold))
-                                Text("\(b.health) · \(b.cycleCount) cycles\(b.timeLeft.isEmpty ? "" : " · \(b.timeLeft)")")
+                                Text(loc.t("\(b.health) · \(b.cycleCount) 次循环\(b.timeLeft.isEmpty ? "" : " · \(b.timeLeft)")", "\(b.health) · \(b.cycleCount) cycles\(b.timeLeft.isEmpty ? "" : " · \(b.timeLeft)")"))
                                     .font(.system(size: 11, design: .rounded)).foregroundColor(.secondary)
                             }
                             Spacer(minLength: 0)
@@ -421,14 +422,14 @@ struct StatusView: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Bluetooth", systemImage: "antenna.radiowaves.left.and.right")
+                    Label(loc.t("蓝牙", "Bluetooth"), systemImage: "antenna.radiowaves.left.and.right")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
-                    Text("\(devices.filter { $0.connected }.count)/\(devices.count) connected")
+                    Text(loc.t("\(devices.filter { $0.connected }.count)/\(devices.count) 已连接", "\(devices.filter { $0.connected }.count)/\(devices.count) connected"))
                         .font(.system(size: 10)).foregroundColor(.secondary)
                 }
                 if devices.isEmpty {
-                    Text("No paired devices found.")
+                    Text(loc.t("未找到已配对设备。", "No paired devices found."))
                         .font(.system(size: 12)).foregroundColor(.secondary)
                 } else {
                     ForEach(devices.indices, id: \.self) { i in
@@ -451,10 +452,10 @@ struct StatusView: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Top Processes", systemImage: "flame")
+                    Label(loc.t("高占用进程", "Top Processes"), systemImage: "flame")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
-                    Text("By CPU").font(.system(size: 10)).foregroundColor(.secondary).textCase(.uppercase)
+                    Text(loc.t("按 CPU 排序", "By CPU")).font(.system(size: 10)).foregroundColor(.secondary).textCase(.uppercase)
                 }
                 ForEach(snap.topProcesses.prefix(8).indices, id: \.self) { i in
                     let p = snap.topProcesses[i]
@@ -481,7 +482,7 @@ struct StatusView: View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Label("Process Alerts", systemImage: "exclamationmark.bubble")
+                    Label(loc.t("进程警报", "Process Alerts"), systemImage: "exclamationmark.bubble")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     Text("\(alerts.count)").font(.system(size: 11, weight: .bold, design: .rounded))

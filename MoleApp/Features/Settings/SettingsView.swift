@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var service: MoleService
+    @EnvironmentObject private var loc: Localization
     @State private var version = ""
     @State private var touchidStatus = ""
     @State private var completionScript = ""
@@ -22,6 +23,7 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header
+                    languageCard
                     aboutCard
                     touchidCard
                     completionCard
@@ -32,11 +34,14 @@ struct SettingsView: View {
             }
             .featurePadding()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .alert("Remove Mole?", isPresented: $showRemoveAlert) {
-                Button("Cancel", role: .cancel) {}
-                Button("Remove", role: .destructive) { runRemove() }
+            .alert(loc.t("移除 Mole？", "Remove Mole?"), isPresented: $showRemoveAlert) {
+                Button(loc.t("取消", "Cancel"), role: .cancel) {}
+                Button(loc.t("移除", "Remove"), role: .destructive) { runRemove() }
             } message: {
-                Text("This uninstalls the Mole CLI from your system. The app will no longer be able to run commands.")
+                Text(loc.t(
+                    "这将从系统卸载 Mole CLI。卸载后应用将无法再运行命令。",
+                    "This uninstalls the Mole CLI from your system. The app will no longer be able to run commands."
+                ))
             }
             .task {
                 version = await service.version()
@@ -47,32 +52,58 @@ struct SettingsView: View {
 
     private var header: some View {
         FeatureHeader(
-            title: "Settings",
-            subtitle: "Configure Touch ID, shell completion, updates and removal.",
+            title: loc.t("设置", "Settings"),
+            subtitle: loc.t("配置 Touch ID、Shell 补全、更新与卸载。", "Configure Touch ID, shell completion, updates and removal."),
             systemImage: "gearshape"
         )
+    }
+
+    private var languageCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label(loc.t("界面语言", "Interface Language"), systemImage: "globe")
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                }
+                Text(loc.t(
+                    "选择应用界面语言，更改立即生效。",
+                    "Choose the app interface language. Changes apply immediately."
+                ))
+                .font(.system(size: 11)).foregroundColor(.secondary)
+                Picker(loc.t("语言", "Language"), selection: Binding(
+                    get: { loc.language },
+                    set: { loc.setLanguage($0) }
+                )) {
+                    ForEach(Language.allCases) { lang in
+                        Text(lang.displayName).tag(lang)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+        }
     }
 
     private var aboutCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text("About").font(.system(size: 13, weight: .semibold))
+                Text(loc.t("关于", "About")).font(.system(size: 13, weight: .semibold))
                 HStack {
-                    Label("CLI Version", systemImage: "tag").foregroundColor(.secondary)
+                    Label(loc.t("CLI 版本", "CLI Version"), systemImage: "tag").foregroundColor(.secondary)
                     Spacer()
                     Text(version.isEmpty ? "—" : version)
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 }
                 HStack {
-                    Label("Binary", systemImage: "terminal").foregroundColor(.secondary)
+                    Label(loc.t("可执行文件", "Binary"), systemImage: "terminal").foregroundColor(.secondary)
                     Spacer()
-                    Text(CLILocator.resolve() ?? "not found")
+                    Text(CLILocator.resolve() ?? loc.t("未找到", "not found"))
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundColor(.secondary)
                         .lineLimit(1).truncationMode(.middle)
                 }
                 HStack {
-                    Label("GUI Version", systemImage: "app").foregroundColor(.secondary)
+                    Label(loc.t("GUI 版本", "GUI Version"), systemImage: "app").foregroundColor(.secondary)
                     Spacer()
                     Text("Mole 1.0.0")
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
@@ -82,7 +113,9 @@ struct SettingsView: View {
                     if helpText.isEmpty { Task { helpText = await service.help() } }
                     showHelp.toggle()
                 } label: {
-                    Label(showHelp ? "Hide CLI Help" : "View CLI Help", systemImage: "questionmark.circle")
+                    Label(showHelp ? loc.t("隐藏 CLI 帮助", "Hide CLI Help")
+                                   : loc.t("查看 CLI 帮助", "View CLI Help"),
+                          systemImage: "questionmark.circle")
                         .font(.system(size: 12, weight: .medium))
                 }
                 .buttonStyle(.bordered)
@@ -104,7 +137,7 @@ struct SettingsView: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Touch ID for sudo", systemImage: "touchid")
+                    Label(loc.t("用于 sudo 的 Touch ID", "Touch ID for sudo"), systemImage: "touchid")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     if !touchidStatus.isEmpty {
@@ -116,8 +149,11 @@ struct SettingsView: View {
                             .foregroundColor(touchidStatus.lowercased().contains("enabl") ? .green : .secondary)
                     }
                 }
-                Text("Authenticate sudo commands with Touch ID instead of typing your password.")
-                    .font(.system(size: 11)).foregroundColor(.secondary)
+                Text(loc.t(
+                    "使用 Touch ID 进行 sudo 命令验证，无需输入密码。",
+                    "Authenticate sudo commands with Touch ID instead of typing your password."
+                ))
+                .font(.system(size: 11)).foregroundColor(.secondary)
                 HStack(spacing: 8) {
                     Button {
                         Task {
@@ -126,7 +162,7 @@ struct SettingsView: View {
                             }
                             touchidStatus = await service.touchidStatus()
                         }
-                    } label: { Label("Enable", systemImage: "checkmark.circle") }
+                    } label: { Label(loc.t("启用", "Enable"), systemImage: "checkmark.circle") }
                         .buttonStyle(PrimaryButtonStyle())
                         .disabled(touchidRunner.isRunning)
 
@@ -137,7 +173,7 @@ struct SettingsView: View {
                             }
                             touchidStatus = await service.touchidStatus()
                         }
-                    } label: { Label("Disable", systemImage: "xmark.circle") }
+                    } label: { Label(loc.t("禁用", "Disable"), systemImage: "xmark.circle") }
                         .buttonStyle(.bordered)
                         .disabled(touchidRunner.isRunning)
 
@@ -156,18 +192,18 @@ struct SettingsView: View {
     private var completionCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Label("Shell Completion", systemImage: "text.append")
+                Label(loc.t("Shell 补全", "Shell Completion"), systemImage: "text.append")
                     .font(.system(size: 13, weight: .semibold))
-                Text("Generate tab-completion scripts for your shell.")
+                Text(loc.t("为你的 Shell 生成 Tab 补全脚本。", "Generate tab-completion scripts for your shell."))
                     .font(.system(size: 11)).foregroundColor(.secondary)
                 HStack(spacing: 8) {
-                    Picker("Shell", selection: $selectedShell) {
+                    Picker(loc.t("Shell", "Shell"), selection: $selectedShell) {
                         ForEach(shells, id: \.self) { Text($0).tag($0) }
                     }
                     .pickerStyle(.segmented).frame(width: 210)
                     Button {
                         Task { completionScript = await service.completionScript(for: selectedShell) }
-                    } label: { Label("Generate", systemImage: "doc.text") }
+                    } label: { Label(loc.t("生成", "Generate"), systemImage: "doc.text") }
                         .buttonStyle(.bordered)
                     Button {
                         Task {
@@ -175,7 +211,7 @@ struct SettingsView: View {
                                 try await service.installCompletion(onLine: onLine)
                             }
                         }
-                    } label: { Label("Auto-install", systemImage: "wand.and.stars") }
+                    } label: { Label(loc.t("自动安装", "Auto-install"), systemImage: "wand.and.stars") }
                         .buttonStyle(PrimaryButtonStyle())
                 }
                 if !completionScript.isEmpty {
@@ -195,9 +231,9 @@ struct SettingsView: View {
     private var updateCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Label("Update Mole", systemImage: "arrow.up.circle")
+                Label(loc.t("更新 Mole", "Update Mole"), systemImage: "arrow.up.circle")
                     .font(.system(size: 13, weight: .semibold))
-                Text("Check for and install the latest version of the Mole CLI.")
+                Text(loc.t("检查并安装最新版本的 Mole CLI。", "Check for and install the latest version of the Mole CLI."))
                     .font(.system(size: 11)).foregroundColor(.secondary)
                 HStack(spacing: 8) {
                     Button {
@@ -207,7 +243,7 @@ struct SettingsView: View {
                             }
                             version = await service.version()
                         }
-                    } label: { Label("Check & Update", systemImage: "arrow.triangle.2.circlepath") }
+                    } label: { Label(loc.t("检查并更新", "Check & Update"), systemImage: "arrow.triangle.2.circlepath") }
                         .buttonStyle(PrimaryButtonStyle())
                         .disabled(runner.isRunning)
                     Button {
@@ -217,7 +253,7 @@ struct SettingsView: View {
                             }
                             version = await service.version()
                         }
-                    } label: { Label("Force", systemImage: "exclamationmark.arrow.circlepath") }
+                    } label: { Label(loc.t("强制", "Force"), systemImage: "exclamationmark.arrow.circlepath") }
                         .buttonStyle(.bordered)
                         .disabled(runner.isRunning)
                 }
@@ -228,17 +264,17 @@ struct SettingsView: View {
     private var removeCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Label("Remove Mole", systemImage: "trash")
+                Label(loc.t("移除 Mole", "Remove Mole"), systemImage: "trash")
                     .font(.system(size: 13, weight: .semibold))
-                Text("Uninstall the Mole CLI from your system.")
+                Text(loc.t("从系统卸载 Mole CLI。", "Uninstall the Mole CLI from your system."))
                     .font(.system(size: 11)).foregroundColor(.secondary)
                 HStack(spacing: 8) {
                     Button {
                         Task { removePreview = await service.removePreview() }
-                    } label: { Label("Preview", systemImage: "eye") }
+                    } label: { Label(loc.t("预览", "Preview"), systemImage: "eye") }
                         .buttonStyle(.bordered)
                     Button { showRemoveAlert = true } label: {
-                        Label("Remove", systemImage: "trash")
+                        Label(loc.t("移除", "Remove"), systemImage: "trash")
                     }
                     .buttonStyle(PrimaryButtonStyle(tint: .red))
                 }
@@ -260,11 +296,11 @@ struct SettingsView: View {
         Card(padding: 12) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Label(runner.isRunning ? "Working…" : "Output", systemImage: "terminal")
+                    Label(runner.isRunning ? loc.t("执行中…", "Working…") : loc.t("输出", "Output"), systemImage: "terminal")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     if let code = runner.exitCode {
-                        Text(code == 0 ? "✓ done" : "exit \(code)")
+                        Text(code == 0 ? loc.t("✓ 完成", "✓ done") : loc.t("退出 \(code)", "exit \(code)"))
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundColor(code == 0 ? .green : .red)
                     }

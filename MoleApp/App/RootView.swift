@@ -3,6 +3,7 @@ import SwiftUI
 /// The root two-column layout: sidebar + detail.
 struct RootView: View {
     @EnvironmentObject private var service: MoleService
+    @EnvironmentObject private var loc: Localization
     @State private var selection: Feature = .status
 
     var body: some View {
@@ -35,17 +36,18 @@ struct RootView: View {
 struct SidebarView: View {
     @Binding var selection: Feature
     @EnvironmentObject private var service: MoleService
+    @EnvironmentObject private var loc: Localization
 
     var body: some View {
         List(selection: $selection) {
             ForEach(FeatureSection.allCases) { section in
-                Section(section.rawValue) {
+                Section(section.title(loc)) {
                     ForEach(section.features) { feature in
                         Label {
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(feature.title)
+                                Text(feature.title(loc))
                                     .font(.system(size: 13, weight: .medium))
-                                Text(feature.subtitle)
+                                Text(feature.subtitle(loc))
                                     .font(.system(size: 10))
                                     .foregroundColor(.secondary)
                             }
@@ -71,9 +73,13 @@ struct SidebarView: View {
             Image(systemName: service.isInstalled ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                 .foregroundColor(service.isInstalled ? .green : .orange)
             VStack(alignment: .leading, spacing: 0) {
-                Text(service.isInstalled ? "Mole CLI connected" : "Mole CLI not found")
+                Text(service.isInstalled
+                     ? loc.t("Mole CLI 已连接", "Mole CLI connected")
+                     : loc.t("未找到 Mole CLI", "Mole CLI not found"))
                     .font(.system(size: 11, weight: .semibold))
-                Text(service.isInstalled ? "Ready to manage your Mac" : "Install via Homebrew to begin")
+                Text(service.isInstalled
+                     ? loc.t("已准备好管理你的 Mac", "Ready to manage your Mac")
+                     : loc.t("通过 Homebrew 安装以开始", "Install via Homebrew to begin"))
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
             }

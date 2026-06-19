@@ -206,12 +206,17 @@ struct LoadingView: View {
 
 /// Shown when the Mole CLI is not installed.
 struct CLIUnavailableView: View {
+    @EnvironmentObject private var loc: Localization
+
     var body: some View {
         EmptyStateView(
             systemImage: "terminal",
-            title: "Mole CLI not found",
-            message: "Install Mole to unlock this feature:\nbrew install mole",
-            action: ("Copy install command", {
+            title: loc.t("未找到 Mole CLI", "Mole CLI not found"),
+            message: loc.t(
+                "安装 Mole 以解锁此功能：\nbrew install mole",
+                "Install Mole to unlock this feature:\nbrew install mole"
+            ),
+            action: (loc.t("复制安装命令", "Copy install command"), {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString("brew install mole", forType: .string)
             })

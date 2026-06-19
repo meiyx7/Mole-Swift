@@ -77,6 +77,30 @@ enum CLIBridge {
 
     // MARK: - Captured execution
 
+    /// Shared decoder. The Go CLI emits dates (`collected_at`, `triggered_at`)
+    /// as RFC3339 / RFC3339Nano strings, so we decode with an ISO8601 strategy
+    /// that tolerates optional fractional seconds. The default
+    /// `.deferredToDate` strategy expects a Double timestamp and fails with
+    /// "cannot parse cli output" — this is the root cause of the status and
+    /// history dashboard errors.
+    static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+            if let date = fractional.date(from: raw) { return date }
+            if let date = plain.date(from: raw) { return date }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "expected an ISO8601 date, got: \(raw)"
+            )
+        }
+        return decoder
+    }()
+
     /// Runs a command, collecting stdout and stderr into strings.
     static func run(_ args: [String], options: CLIOptions = CLIOptions()) async throws -> CLIResult {
         guard let binary = CLILocator.resolve() else { throw CLIBridgeError.binaryMissing }
@@ -102,10 +126,18 @@ enum CLIBridge {
         guard let data = result.stdout.data(using: .utf8) else {
             throw CLIBridgeError.decodeFailed("output was not UTF-8")
         }
+        // Surface stderr context when stdout is empty/unparseable so the GUI
+        // shows the real reason (e.g. binary missing, command error) instead
+        // of a bare "cannot parse cli output".
         do {
-            return try JSONDecoder().decode(T.self, from: data)
+            return try decoder.decode(T.self, from: data)
         } catch {
-            throw CLIBridgeError.decodeFailed("\(error)")
+            let stderrHint = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let stdoutPreview = String(result.stdout.prefix(200))
+            let detail = stderrHint.isEmpty
+                ? "\(error) | stdout: \(stdoutPreview)"
+                : "\(error) | stderr: \(stderrHint)"
+            throw CLIBridgeError.decodeFailed(detail)
         }
     }
 
