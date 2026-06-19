@@ -243,20 +243,18 @@ struct StatusView: View {
                     ForEach(gpus.indices, id: \.self) { i in
                         let g = gpus[i]
                         // powermetrics requires root; when unauthorized the
-                        // CLI returns -1, which we must not render as "-1%".
+                        // CLI returns -1. Hide the usage bar entirely instead
+                        // of showing a misleading "N/A" or "-1%".
                         let usageAvailable = g.usage >= 0
-                        let tone = StatusTone.forUsage(max(0, g.usage))
                         VStack(alignment: .leading, spacing: 4) {
                             Text(g.name).font(.system(size: 12, weight: .medium))
-                            HStack {
-                                ProgressBar(value: usageAvailable ? g.usage : 0, tone: tone)
-                                    .opacity(usageAvailable ? 1 : 0.3)
-                                Text(usageAvailable
-                                     ? ByteFormatter.percent(g.usage)
-                                     : loc.t("需要授权", "Auth required"))
-                                    .font(.system(size: 11, design: .rounded))
-                                    .frame(width: 80, alignment: .trailing)
-                                    .foregroundColor(usageAvailable ? .primary : .secondary)
+                            if usageAvailable {
+                                let tone = StatusTone.forUsage(g.usage)
+                                HStack {
+                                    ProgressBar(value: g.usage, tone: tone)
+                                    Text(ByteFormatter.percent(g.usage)).font(.system(size: 11, design: .rounded))
+                                        .frame(width: 44, alignment: .trailing)
+                                }
                             }
                             if g.memoryTotal > 0 {
                                 Text(loc.t("\(ByteFormatter.bytes(g.memoryUsed)) / \(ByteFormatter.bytes(g.memoryTotal)) VRAM", "\(ByteFormatter.bytes(g.memoryUsed)) / \(ByteFormatter.bytes(g.memoryTotal)) VRAM"))
@@ -271,31 +269,44 @@ struct StatusView: View {
 
     private func thermalCard(_ t: ThermalStatus, _ snap: StatusSnapshot) -> some View {
         // collectThermal() does not synthesize CPU temp without root access,
-        // so cpuTemp == 0 means "unavailable", not "0°C". Treat it as neutral.
+        // so cpuTemp == 0 means "unavailable". Hide unavailable metrics
+        // entirely instead of showing misleading "0°C" or "N/A".
         let cpuTempAvailable = t.cpuTemp > 0
-        let tone: StatusTone = !cpuTempAvailable ? .neutral
-            : (t.cpuTemp > 90 ? .critical : (t.cpuTemp > 75 ? .warn : .good))
-        return Card {
+        let gpuTempAvailable = t.gpuTemp > 0
+        let hasBattery = snap.batteries?.first != nil && t.batteryTemp > 0
+        let hasPower = t.systemPower > 0
+        let hasFan = t.fanCount > 0
+        // If nothing is available at all, don't render the card.
+        guard cpuTempAvailable || gpuTempAvailable || hasBattery || hasPower || hasFan else {
+            return AnyView(EmptyView())
+        }
+        let tone: StatusTone = t.cpuTemp > 90 ? .critical : (t.cpuTemp > 75 ? .warn : .good)
+        return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Label(loc.t("温度与电源", "Thermal & Power"), systemImage: "thermometer.medium")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
-                    if t.fanCount > 0 {
+                    if hasFan {
                         Text(loc.t("\(t.fanSpeed) RPM", "\(t.fanSpeed) RPM")).font(.system(size: 11, design: .rounded)).foregroundColor(.secondary)
                     }
                 }
-                HStack(spacing: 18) {
-                    metric(loc.t("CPU", "CPU"),
-                           cpuTempAvailable ? String(format: "%.0f°C", t.cpuTemp) : loc.t("N/A", "N/A"),
-                           tone: tone)
-                    if t.gpuTemp > 0 { metric(loc.t("GPU", "GPU"), String(format: "%.0f°C", t.gpuTemp), tone: .neutral) }
-                    if snap.batteries?.first != nil {
-                        metric(loc.t("电池", "Battery"), String(format: "%.0f°C", t.batteryTemp), tone: .neutral)
+                let hasAnyTemp = cpuTempAvailable || gpuTempAvailable || hasBattery
+                if hasAnyTemp {
+                    HStack(spacing: 18) {
+                        if cpuTempAvailable {
+                            metric(loc.t("CPU", "CPU"), String(format: "%.0f°C", t.cpuTemp), tone: tone)
+                        }
+                        if gpuTempAvailable {
+                            metric(loc.t("GPU", "GPU"), String(format: "%.0f°C", t.gpuTemp), tone: .neutral)
+                        }
+                        if hasBattery {
+                            metric(loc.t("电池", "Battery"), String(format: "%.0f°C", t.batteryTemp), tone: .neutral)
+                        }
                     }
                 }
-                if t.systemPower > 0 {
-                    Divider()
+                if hasPower {
+                    if hasAnyTemp { Divider() }
                     HStack(spacing: 18) {
                         metric(loc.t("系统", "System"), String(format: "%.1f W", t.systemPower), tone: .neutral)
                         if t.adapterPower > 0 { metric(loc.t("适配器", "Adapter"), String(format: "%.1f W", t.adapterPower), tone: .good) }
@@ -303,7 +314,7 @@ struct StatusView: View {
                     }
                 }
             }
-        }
+        })
     }
 
     private func metric(_ title: String, _ value: String, tone: StatusTone) -> some View {

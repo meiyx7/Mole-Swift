@@ -42,4 +42,25 @@ struct AppListEntry: Codable, Hashable, Identifiable {
     }
 
     var isHomebrew: Bool { source == "Homebrew" }
+
+    /// Effective size in KB for sorting. Falls back to parsing the `size`
+    /// display string (e.g. "1.2GB", "500MB") when `sizeKB` is 0, which
+    /// happens when the CLI's quick scan (mdls) couldn't determine the size
+    /// and the cache hasn't been refreshed yet.
+    var effectiveSizeKB: Int {
+        if sizeKB > 0 { return sizeKB }
+        return parseSizeStringKB(size)
+    }
+
+    private func parseSizeStringKB(_ s: String) -> Int {
+        let trimmed = s.trimmingCharacters(in: .whitespaces).uppercased()
+        guard !trimmed.isEmpty, trimmed != "N/A", trimmed != "--" else { return 0 }
+        let digits = trimmed.unicodeScalars.filter { CharacterSet.decimalDigits.contains($0) }
+        guard let value = Double(String(String.UnicodeScalarView(digits))) else { return 0 }
+        if trimmed.contains("GB") { return Int(value * 1_048_576) }
+        if trimmed.contains("MB") { return Int(value * 1024) }
+        if trimmed.contains("KB") { return Int(value) }
+        if trimmed.contains("B") { return Int(value / 1024) }
+        return 0
+    }
 }
