@@ -43,6 +43,29 @@ struct CLIOutputLine: Identifiable, Hashable {
     let date: Date
 }
 
+/// Strips ANSI escape sequences (colour codes, cursor moves, line clears
+/// like `\033[2K`, etc.) from CLI output so it renders cleanly in the GUI
+/// and can be parsed by `PreviewParser`. Without this, lines like
+/// `\033[1;35m➤ User essentials\033[0m` won't match `hasPrefix("➤")`.
+enum ANSIStripper {
+    /// CSI sequence: `ESC [ ... letter`, plus common 8-bit variants.
+    /// Also strips standalone `ESC` and OSC sequences `ESC ] ... BEL`.
+    private static let pattern: NSRegularExpression = {
+        // Matches: \x1b\[[0-9;]*[A-Za-z]  (CSI)
+        //          \x1b\][^\x07\x1b]*(\x07|\x1b\\)  (OSC)
+        //          \x1b[@-Z\\-_]  (other ESC sequences)
+        let p = "\u{1b}\\[[0-9;?]*[A-Za-z]|\u{1b}\\][^\u{07}\u{1b}]*(\u{07}|\u{1b}\\\\)|\u{1b}[@-Z\\\\-_]"
+        return try! NSRegularExpression(pattern: p, options: [])
+    }()
+
+    static func strip(_ s: String) -> String {
+        let range = NSRange(s.startIndex..<s.endIndex, in: s)
+        let cleaned = pattern.stringByReplacingMatches(in: s, range: range, withTemplate: "")
+        // Collapse leftover carriage returns used by spinners / progress lines.
+        return cleaned.replacingOccurrences(of: "\r", with: "")
+    }
+}
+
 /// Result of a captured (non-streaming) command run.
 struct CLIResult {
     let exitCode: Int32
@@ -265,14 +288,17 @@ enum CLIBridge {
                     let lineData = buffer.prefix(upTo: nl)
                     buffer.removeSubrange(0...nl)
                     if let text = String(data: lineData, encoding: .utf8) {
-                        let cleaned = text.hasSuffix("\r") ? String(text.dropLast()) : text
+                        // Strip ANSI colour/cursor escapes so the GUI shows
+                        // clean text and PreviewParser can match prefixes.
+                        let cleaned = ANSIStripper.strip(text)
                         let line = CLIOutputLine(text: cleaned, isError: isError, date: Date())
                         lock.lock(); onLine(line); lock.unlock()
                     }
                 }
             }
             if !buffer.isEmpty, let text = String(data: buffer, encoding: .utf8) {
-                let line = CLIOutputLine(text: text, isError: isError, date: Date())
+                let cleaned = ANSIStripper.strip(text)
+                let line = CLIOutputLine(text: cleaned, isError: isError, date: Date())
                 lock.lock(); onLine(line); lock.unlock()
             }
         }

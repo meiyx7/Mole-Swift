@@ -113,6 +113,7 @@ final class MoleService: ObservableObject {
     func installerPreview(onLine: @escaping (CLIOutputLine) -> Void) async throws -> Int32 {
         var options = CLIOptions()
         options.dryRun = true
+        options.nonInteractive = true
         return try await CLIBridge.runStreaming(["installer", "--dry-run"], options: options, onLine: onLine)
     }
 

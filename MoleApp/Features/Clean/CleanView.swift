@@ -123,22 +123,49 @@ struct CleanView: View {
                 Button(loc.t("停止", "Stop"), role: .destructive) { runner.cancel() }
                     .buttonStyle(.bordered)
             } else {
+                // Single primary action whose label/behaviour follows the flow:
+                // idle/previewing → "Preview", previewed → "Clean Now".
                 Button {
-                    Task { await runPreview() }
+                    if phase == .previewed {
+                        showConfirm = true
+                    } else {
+                        Task { await runPreview() }
+                    }
                 } label: {
-                    Label(loc.t("预览", "Preview"), systemImage: "eye")
+                    Label(primaryActionLabel, systemImage: primaryActionIcon)
                 }
-                .buttonStyle(.bordered)
-                .disabled(phase == .previewing)
-
-                Button {
-                    showConfirm = true
-                } label: {
-                    Label(loc.t("立即清理", "Clean Now"), systemImage: "sparkles")
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(!runner.hasOutput || phase == .running)
+                .buttonStyle(PrimaryButtonStyle(disabled: !canRunPrimary))
+                .disabled(!canRunPrimary)
             }
+        }
+    }
+
+    private var canRunPrimary: Bool {
+        if runner.isRunning { return false }
+        if phase == .idle || phase == .previewing { return true }
+        if phase == .previewed { return runner.hasOutput }
+        return false
+    }
+
+    private var primaryActionLabel: String {
+        switch phase {
+        case .idle, .previewing:
+            return loc.t("预览", "Preview")
+        case .previewed:
+            return loc.t("立即清理", "Clean Now")
+        case .running:
+            return loc.t("清理中…", "Cleaning…")
+        case .done:
+            return loc.t("已完成", "Done")
+        }
+    }
+
+    private var primaryActionIcon: String {
+        switch phase {
+        case .idle, .previewing: return "eye"
+        case .previewed:         return "sparkles"
+        case .running:           return "circle.dashed"
+        case .done:              return "checkmark.circle.fill"
         }
     }
 

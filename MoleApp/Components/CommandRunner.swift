@@ -47,9 +47,15 @@ final class CommandRunner: ObservableObject {
     }
 }
 
-/// Prominent gradient button used for primary actions (Run, Clean, etc.).
+/// Prominent button used for primary actions (Run, Clean, etc.).
+///
+/// Pass `disabled: true` to render a visibly deactivated state (flat gray,
+/// reduced opacity) instead of the brand gradient. This is used by the
+/// preview-gated cleanup screens so users can clearly see when the action
+/// is unavailable.
 struct PrimaryButtonStyle: ButtonStyle {
     var tint: Color? = nil
+    var disabled: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -57,14 +63,22 @@ struct PrimaryButtonStyle: ButtonStyle {
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
             .foregroundColor(.white)
-            .background(
-                (tint.map { LinearGradient(colors: [$0, $0.opacity(0.75)],
-                                           startPoint: .top, endPoint: .bottom) } ?? Theme.brand)
-            )
+            .background(background)
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .opacity(configuration.isPressed ? 0.8 : 1)
+            .opacity(disabled ? 0.6 : (configuration.isPressed ? 0.8 : 1))
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+
+    private var background: some View {
+        if disabled {
+            return AnyView(Color.gray.opacity(0.45))
+        }
+        if let tint {
+            return AnyView(LinearGradient(colors: [tint, tint.opacity(0.75)],
+                                          startPoint: .top, endPoint: .bottom))
+        }
+        return AnyView(Theme.brand)
     }
 }
 
