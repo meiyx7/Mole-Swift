@@ -63,6 +63,13 @@ struct CleanupScreen: View {
                 "This will move the items shown in the preview to Trash, where they can be recovered. Some steps may require an active sudo session."
             ))
         }
+        .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
+            // Cmd+R resets the screen to idle so the user can start fresh.
+            // Only reset if not currently running to avoid interrupting.
+            if !runner.isRunning {
+                resetToIdle()
+            }
+        }
     }
 
     private var header: some View {
@@ -80,11 +87,11 @@ struct CleanupScreen: View {
     /// 1. Preview  2. Review  3. Confirm & Run.
     private var stepGuide: some View {
         HStack(spacing: 10) {
-            stepDot(1, label: loc.t("预览", "Preview"), active: phase == .idle || phase == .previewing, done: phaseIsAfterPreview)
-            stepConnector(active: phaseIsAfterPreview)
-            stepDot(2, label: loc.t("查看", "Review"), active: phase == .previewed, done: phase == .running || phase == .done)
-            stepConnector(active: phase == .running || phase == .done)
-            stepDot(3, label: loc.t("执行", "Run"), active: phase == .running, done: phase == .done)
+            StepDot(n: 1, label: loc.t("预览", "Preview"), active: phase == .idle || phase == .previewing, done: phaseIsAfterPreview)
+            StepConnector(active: phaseIsAfterPreview)
+            StepDot(n: 2, label: loc.t("查看", "Review"), active: phase == .previewed, done: phase == .running || phase == .done)
+            StepConnector(active: phase == .running || phase == .done)
+            StepDot(n: 3, label: loc.t("执行", "Run"), active: phase == .running, done: phase == .done)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
@@ -92,29 +99,6 @@ struct CleanupScreen: View {
 
     private var phaseIsAfterPreview: Bool {
         phase == .previewed || phase == .running || phase == .done || phase == .error
-    }
-
-    private func stepDot(_ n: Int, label: String, active: Bool, done: Bool) -> some View {
-        HStack(spacing: 6) {
-            ZStack {
-                Circle().fill(done ? Theme.color(for: .good) : (active ? Theme.accent : Color.secondary.opacity(0.3)))
-                    .frame(width: 18, height: 18)
-                if done {
-                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundColor(.white)
-                } else {
-                    Text("\(n)").font(.system(size: 10, weight: .bold)).foregroundColor(.white)
-                }
-            }
-            Text(label).font(.system(size: 11, weight: done || active ? .semibold : .regular))
-                .foregroundColor(done || active ? .primary : .secondary)
-        }
-    }
-
-    private func stepConnector(active: Bool) -> some View {
-        Rectangle()
-            .fill(active ? Theme.color(for: .good) : Color.secondary.opacity(0.25))
-            .frame(height: 2)
-            .frame(maxWidth: 60)
     }
 
     // MARK: - Actions
@@ -253,17 +237,20 @@ struct CleanupScreen: View {
     // MARK: - Result banner (shown after run completes)
 
     private var resultBanner: some View {
-        let succeeded = runner.exitCode == 0
+        let succeeded = runner.succeeded
+        let cancelled = runner.wasCancelled
         return Card(padding: 12) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
-                    Image(systemName: succeeded ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    Image(systemName: cancelled ? "stop.circle.fill" : (succeeded ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"))
                         .font(.system(size: 22))
-                        .foregroundColor(Theme.color(for: succeeded ? .good : .critical))
+                        .foregroundColor(Theme.color(for: cancelled ? .neutral : (succeeded ? .good : .critical)))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(succeeded
-                             ? loc.t("完成", "Finished")
-                             : loc.t("未完全成功", "Completed with errors"))
+                        Text(cancelled
+                             ? loc.t("已取消", "Cancelled")
+                             : (succeeded
+                                ? loc.t("完成", "Finished")
+                                : loc.t("未完全成功", "Completed with errors")))
                             .font(.system(size: 14, weight: .semibold))
                         Text(resultSummaryText)
                             .font(.system(size: 11)).foregroundColor(.secondary)

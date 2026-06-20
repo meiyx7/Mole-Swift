@@ -1,25 +1,35 @@
 import Foundation
 
-/// Writes diagnostic information for CLI failures to a log file on the user's
-/// Desktop so issues like "cannot parse cli output" can be debugged without
-/// attaching a debugger.
+/// Writes diagnostic information for CLI failures to a log file in the
+/// user's Library/Logs directory so issues like "cannot parse cli output"
+/// can be debugged without attaching a debugger.
 ///
-/// The log path is `~/Desktop/MoleApp-debug.log`. Entries are appended, never
-/// overwritten, so multiple failures accumulate for a single support session.
+/// The log path is `~/Library/Logs/MoleApp/debug.log`. Entries are
+/// appended, and the file is rotated when it exceeds `maxLogSize`
+/// (5 MB) to prevent unbounded growth.
 enum DebugLog {
-    /// Resolves `~/Desktop/MoleApp-debug.log`. Falls back to a temp path if the
-    /// Desktop folder cannot be located (e.g. sandboxed HOME without a Desktop).
+    /// Maximum log file size before rotation. When exceeded, the current
+    /// log is moved to `debug.log.old` and a fresh log is started.
+    private static let maxLogSize: Int64 = 5 * 1024 * 1024  // 5 MB
+
+    /// Resolves `~/Library/Logs/MoleApp/debug.log`. Creates the directory
+    /// if needed. Falls back to a temp path if the directory cannot be
+    /// created.
     static var logURL: URL {
         let home = NSHomeDirectory()
-        let desktop = URL(fileURLWithPath: home).appendingPathComponent("Desktop")
-        return desktop.appendingPathComponent("MoleApp-debug.log")
+        let logsDir = URL(fileURLWithPath: home)
+            .appendingPathComponent("Library/Logs/MoleApp")
+        let fm = FileManager.default
+        try? fm.createDirectory(at: logsDir, withIntermediateDirectories: true)
+        return logsDir.appendingPathComponent("debug.log")
     }
 
     /// Human-readable path for surfacing in error messages.
     static var logPath: String { logURL.path }
 
     /// Appends a timestamped entry to the log file. Best-effort: failures are
-    /// swallowed silently so logging never masks the original error.
+    /// swallowed silently so logging never masks the original error. Rotates
+    /// the log if it exceeds `maxLogSize`.
     static func append(_ message: String) {
         let stamp = ISO8601DateFormatter().string(from: Date())
         let block = """
@@ -31,6 +41,15 @@ enum DebugLog {
         guard let data = payload.data(using: .utf8) else { return }
         let fm = FileManager.default
         let url = logURL
+
+        // Rotate if the file has grown too large.
+        if let attrs = try? fm.attributesOfItem(atPath: url.path),
+           let size = attrs[.size] as? Int64, size > maxLogSize {
+            let oldURL = url.deletingLastPathComponent().appendingPathComponent("debug.log.old")
+            try? fm.removeItem(at: oldURL)
+            try? fm.moveItem(at: url, to: oldURL)
+        }
+
         if fm.fileExists(atPath: url.path) {
             if let handle = try? FileHandle(forWritingTo: url) {
                 _ = try? handle.seekToEnd()

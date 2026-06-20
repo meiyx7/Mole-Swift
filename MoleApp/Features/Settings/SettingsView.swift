@@ -31,24 +31,13 @@ struct SettingsView: View {
     }
 
     /// Returns true when `v` >= `min` (semantic version compare).
+    /// Uses the shared `UpdateChecker.parseVersion` for consistency.
     private func versionMeets(_ v: String, min: String) -> Bool {
-        let vp = parseSemVer(v)
-        let mp = parseSemVer(min)
+        let vp = UpdateChecker.parseVersion(v)
+        let mp = UpdateChecker.parseVersion(min)
         if vp.major != mp.major { return vp.major > mp.major }
         if vp.minor != mp.minor { return vp.minor > mp.minor }
         return vp.patch >= mp.patch
-    }
-
-    private func parseSemVer(_ s: String) -> (major: Int, minor: Int, patch: Int) {
-        // Strip leading "v" and any suffix like "-nightly".
-        let cleaned = s.hasPrefix("v") ? String(s.dropFirst()) : s
-        let base = cleaned.split(separator: "-").first.map(String.init) ?? cleaned
-        let parts = base.split(separator: ".").map { Int($0) ?? 0 }
-        return (
-            parts.count > 0 ? parts[0] : 0,
-            parts.count > 1 ? parts[1] : 0,
-            parts.count > 2 ? parts[2] : 0
-        )
     }
 
     /// Checks whether this Mac has Touch ID hardware available.
@@ -86,6 +75,12 @@ struct SettingsView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .moleCheckUpdates)) { _ in
                 Task { await updater.checkForUpdates() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
+                Task {
+                    version = await service.version()
+                    touchidStatus = await service.touchidStatus()
+                }
             }
             .onChange(of: updater.state) { newState in
                 // Auto-open download URL when a user-initiated check finds an update.

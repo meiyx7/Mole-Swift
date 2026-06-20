@@ -28,34 +28,19 @@ struct PreviewSummaryView: View {
         let items = summary.totalItems ?? summary.entries.filter { $0.kind == .wouldClean }.count
         let cats = summary.totalCategories ?? groupedSections.count
         HStack(spacing: 12) {
-            statTile(loc.t("可回收空间", "Reclaimable"),
+            StatTile(title: loc.t("可回收空间", "Reclaimable"),
                      value: space,
-                     icon: "arrow.down.circle.fill",
+                     systemImage: "arrow.down.circle.fill",
                      tone: .good)
-            statTile(loc.t("项目数", "Items"),
+            StatTile(title: loc.t("项目数", "Items"),
                      value: "\(items)",
-                     icon: "doc.on.doc.fill",
+                     systemImage: "doc.on.doc.fill",
                      tone: .neutral)
-            statTile(loc.t("类别", "Categories"),
+            StatTile(title: loc.t("类别", "Categories"),
                      value: "\(cats)",
-                     icon: "square.grid.2x2.fill",
+                     systemImage: "square.grid.2x2.fill",
                      tone: .neutral)
         }
-    }
-
-    private func statTile(_ title: String, value: String, icon: String, tone: StatusTone) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: icon)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(.secondary)
-                .textCase(.uppercase)
-            Text(value)
-                .font(.system(size: 18, weight: .semibold, design: .rounded))
-                .foregroundColor(Theme.color(for: tone))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
     }
 
     // MARK: - Sections

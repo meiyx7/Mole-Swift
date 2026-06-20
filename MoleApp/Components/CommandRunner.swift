@@ -11,6 +11,7 @@ final class CommandRunner: ObservableObject {
     @Published var isRunning = false
     @Published var exitCode: Int32? = nil
     @Published var error: String? = nil
+    @Published var wasCancelled = false
 
     /// Maximum lines retained in memory. Excess lines are dropped from the
     /// head to prevent unbounded growth during long-running commands.
@@ -18,7 +19,7 @@ final class CommandRunner: ObservableObject {
 
     private var task: Task<Void, Never>?
 
-    var succeeded: Bool { exitCode == 0 }
+    var succeeded: Bool { exitCode == 0 && !wasCancelled }
     var hasOutput: Bool { !lines.isEmpty }
 
     func run(_ work: @escaping (@escaping (CLIOutputLine) -> Void) async throws -> Int32) {
@@ -26,6 +27,7 @@ final class CommandRunner: ObservableObject {
         lines.removeAll()
         exitCode = nil
         error = nil
+        wasCancelled = false
         isRunning = true
         task = Task { @MainActor in
             do {
@@ -56,6 +58,7 @@ final class CommandRunner: ObservableObject {
         lines.removeAll()
         exitCode = nil
         error = nil
+        wasCancelled = false
         isRunning = true
         do {
             let code = try await work { [weak self] line in
@@ -81,7 +84,10 @@ final class CommandRunner: ObservableObject {
         task = nil
         if isRunning {
             isRunning = false
+            wasCancelled = true
             exitCode = -1
+            // Clear stale error so the UI shows "cancelled" not a prior error.
+            error = nil
         }
     }
 }

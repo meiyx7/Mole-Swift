@@ -115,6 +115,43 @@ struct StatTile: View {
     }
 }
 
+/// A single step indicator dot with a number or checkmark, plus a label.
+/// Shared by CleanupScreen and InstallerView step guides.
+struct StepDot: View {
+    let n: Int
+    let label: String
+    var active: Bool = false
+    var done: Bool = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ZStack {
+                Circle().fill(done ? Theme.color(for: .good) : (active ? Theme.accent : Color.secondary.opacity(0.3)))
+                    .frame(width: 18, height: 18)
+                if done {
+                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundColor(.white)
+                } else {
+                    Text("\(n)").font(.system(size: 10, weight: .bold)).foregroundColor(.white)
+                }
+            }
+            Text(label).font(.system(size: 11, weight: done || active ? .semibold : .regular))
+                .foregroundColor(done || active ? .primary : .secondary)
+        }
+    }
+}
+
+/// A connector line between step dots, coloured by completion.
+struct StepConnector: View {
+    var active: Bool = false
+
+    var body: some View {
+        Rectangle()
+            .fill(active ? Theme.color(for: .good) : Color.secondary.opacity(0.25))
+            .frame(height: 2)
+            .frame(maxWidth: 60)
+    }
+}
+
 /// A linear progress bar with a tone-coloured fill.
 struct ProgressBar: View {
     let value: Double
@@ -256,7 +293,7 @@ struct ConsoleOutputView: View {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(displayedLines) { line in
                         Text(line.text)
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(.system(.caption, design: .monospaced))
                             .foregroundColor(line.isError ? Color.red.opacity(0.9) : .primary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .id(line.id)

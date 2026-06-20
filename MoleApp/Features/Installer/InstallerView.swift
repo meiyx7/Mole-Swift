@@ -45,6 +45,9 @@ struct InstallerView: View {
                 } message: {
                     Text(loc.t("这将通过 Mole CLI 删除扫描到的安装包文件（路由到废纸篓）。", "This will delete the scanned installer files via the Mole CLI (routed to Trash)."))
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
+                    if !runner.isRunning { scanNow() }
+                }
             }
         }
     }
@@ -109,11 +112,11 @@ struct InstallerView: View {
 
     private var stepGuide: some View {
         HStack(spacing: 10) {
-            stepDot(1, label: loc.t("扫描", "Scan"), active: phase == .idle || phase == .scanning, done: phaseIsAfterScan)
-            stepConnector(active: phaseIsAfterScan)
-            stepDot(2, label: loc.t("查看", "Review"), active: phase == .scanned, done: phase == .running || phase == .done)
-            stepConnector(active: phase == .running || phase == .done)
-            stepDot(3, label: loc.t("执行", "Run"), active: phase == .running, done: phase == .done)
+            StepDot(n: 1, label: loc.t("扫描", "Scan"), active: phase == .idle || phase == .scanning, done: phaseIsAfterScan)
+            StepConnector(active: phaseIsAfterScan)
+            StepDot(n: 2, label: loc.t("查看", "Review"), active: phase == .scanned, done: phase == .running || phase == .done)
+            StepConnector(active: phase == .running || phase == .done)
+            StepDot(n: 3, label: loc.t("执行", "Run"), active: phase == .running, done: phase == .done)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
@@ -121,29 +124,6 @@ struct InstallerView: View {
 
     private var phaseIsAfterScan: Bool {
         phase == .scanned || phase == .running || phase == .done
-    }
-
-    private func stepDot(_ n: Int, label: String, active: Bool, done: Bool) -> some View {
-        HStack(spacing: 6) {
-            ZStack {
-                Circle().fill(done ? Theme.color(for: .good) : (active ? Theme.accent : Color.secondary.opacity(0.3)))
-                    .frame(width: 18, height: 18)
-                if done {
-                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundColor(.white)
-                } else {
-                    Text("\(n)").font(.system(size: 10, weight: .bold)).foregroundColor(.white)
-                }
-            }
-            Text(label).font(.system(size: 11, weight: done || active ? .semibold : .regular))
-                .foregroundColor(done || active ? .primary : .secondary)
-        }
-    }
-
-    private func stepConnector(active: Bool) -> some View {
-        Rectangle()
-            .fill(active ? Theme.color(for: .good) : Color.secondary.opacity(0.25))
-            .frame(height: 2)
-            .frame(maxWidth: 60)
     }
 
     // MARK: - Categories card
@@ -235,8 +215,14 @@ struct InstallerView: View {
         VStack(alignment: .leading, spacing: 10) {
             // Stat row
             HStack(spacing: 12) {
-                statTile(loc.t("可回收空间", "Reclaimable"), ByteFormatter.bytes(totalSize), "arrow.down.circle.fill", .good)
-                statTile(loc.t("文件数", "Files"), "\(foundFiles.count)", "doc.on.doc.fill", .neutral)
+                StatTile(title: loc.t("可回收空间", "Reclaimable"),
+                         value: ByteFormatter.bytes(totalSize),
+                         systemImage: "arrow.down.circle.fill",
+                         tone: .good)
+                StatTile(title: loc.t("文件数", "Files"),
+                         value: "\(foundFiles.count)",
+                         systemImage: "doc.on.doc.fill",
+                         tone: .neutral)
             }
             Divider()
             // File rows
@@ -244,21 +230,6 @@ struct InstallerView: View {
                 fileRow(file)
             }
         }
-    }
-
-    private func statTile(_ title: String, _ value: String, _ icon: String, _ tone: StatusTone) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: icon)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(.secondary)
-                .textCase(.uppercase)
-            Text(value)
-                .font(.system(size: 18, weight: .semibold, design: .rounded))
-                .foregroundColor(Theme.color(for: tone))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func fileRow(_ file: InstallerScanner.FoundFile) -> some View {

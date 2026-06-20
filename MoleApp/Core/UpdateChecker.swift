@@ -119,16 +119,26 @@ final class UpdateChecker: ObservableObject {
     // MARK: - Version comparison
 
     /// Returns true if `lhs` is a newer semantic version than `rhs`.
+    /// Strips leading "v" and prerelease suffixes (e.g. "-nightly") so
+    /// "1.44.0-nightly" compares as 1.44.0.
     private func isNewer(_ lhs: String, than rhs: String) -> Bool {
-        let l = parseVersion(lhs)
-        let r = parseVersion(rhs)
+        let l = Self.parseVersion(lhs)
+        let r = Self.parseVersion(rhs)
         if l.major != r.major { return l.major > r.major }
         if l.minor != r.minor { return l.minor > r.minor }
         return l.patch > r.patch
     }
 
-    private func parseVersion(_ s: String) -> (major: Int, minor: Int, patch: Int) {
-        let parts = s.split(separator: ".").map { Int($0) ?? 0 }
+    /// Parses a version string into (major, minor, patch), stripping a
+    /// leading "v" and any prerelease suffix (e.g. "-nightly", "-beta1").
+    /// Shared with SettingsView so version comparison is consistent.
+    static func parseVersion(_ s: String) -> (major: Int, minor: Int, patch: Int) {
+        var cleaned = s.hasPrefix("v") ? String(s.dropFirst()) : s
+        // Strip prerelease suffix: "1.44.0-nightly" → "1.44.0"
+        if let dash = cleaned.firstIndex(of: "-") {
+            cleaned = String(cleaned[..<dash])
+        }
+        let parts = cleaned.split(separator: ".").map { Int($0) ?? 0 }
         return (
             parts.count > 0 ? parts[0] : 0,
             parts.count > 1 ? parts[1] : 0,
