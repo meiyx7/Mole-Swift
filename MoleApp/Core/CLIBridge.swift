@@ -236,8 +236,8 @@ enum CLIBridge {
         let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
-        if options.nonInteractive, let null = FileHandle(forReadingAtPath: "/dev/null") {
-            process.standardInput = null
+        if options.nonInteractive {
+            process.standardInput = autoYesPipe()
         }
 
         do {
@@ -250,6 +250,19 @@ enum CLIBridge {
         let stdout = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         return CLIResult(exitCode: process.terminationStatus, stdout: stdout, stderr: stderr)
+    }
+
+    /// Creates a pipe pre-loaded with "y\n" so that any confirmation
+    /// prompt from the CLI (e.g. "Proceed with uninstallation? [y/N]")
+    /// is automatically answered "yes". This is needed because the
+    /// installed `mo` CLI may be an upstream version that doesn't
+    /// check the MOLE_NON_INTERACTIVE environment variable.
+    private static func autoYesPipe() -> Pipe {
+        let pipe = Pipe()
+        let data = "y\n".data(using: .utf8) ?? Data()
+        try? pipe.fileHandleForWriting.write(contentsOf: data)
+        try? pipe.fileHandleForWriting.close()
+        return pipe
     }
 
     private static func stream(
@@ -270,8 +283,8 @@ enum CLIBridge {
         let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
-        if options.nonInteractive, let null = FileHandle(forReadingAtPath: "/dev/null") {
-            process.standardInput = null
+        if options.nonInteractive {
+            process.standardInput = autoYesPipe()
         }
 
         streamingTerminator = process
