@@ -126,6 +126,14 @@ final class MoleService: ObservableObject {
         return try await CLIBridge.runStreaming(["purge"], options: options, onLine: onLine)
     }
 
+    /// Purge specific paths passed as arguments.
+    @discardableResult
+    func purge(args: [String], onLine: @escaping (CLIOutputLine) -> Void) async throws -> Int32 {
+        var options = CLIOptions()
+        options.nonInteractive = true
+        return try await CLIBridge.runStreaming(args, options: options, onLine: onLine)
+    }
+
     // MARK: - Installer
 
     @discardableResult
