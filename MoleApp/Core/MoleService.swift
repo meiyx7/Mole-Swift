@@ -21,7 +21,13 @@ final class MoleService: ObservableObject {
     func version() async -> String {
         guard isInstalled else { return "Not installed" }
         let result = try? await CLIBridge.run(["--version"])
-        return result?.stdout.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Unknown"
+        let raw = result?.stdout.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Unknown"
+        // `mo --version` outputs "Mole version 1.43.1\nmacOS: ...". Extract
+        // just the semver string so downstream version comparison works.
+        if let match = raw.range(of: #"\d+\.\d+\.\d+"#, options: .regularExpression) {
+            return String(raw[match])
+        }
+        return raw
     }
 
     func help() async -> String {
@@ -132,6 +138,13 @@ final class MoleService: ObservableObject {
         args.append(contentsOf: apps)
         var options = CLIOptions()
         options.nonInteractive = true
+        // Don't auto-answer "y" for uninstall. The CLI checks
+        // MOLE_NON_INTERACTIVE and skips its own confirmation prompt.
+        // If we pipe "y" here, the CLI commits to the uninstall before
+        // the macOS sudo dialog appears; cancelling the password would
+        // still leave the app trashed. With noAutoConfirm, if sudo is
+        // cancelled the CLI aborts with a non-zero exit code.
+        options.noAutoConfirm = true
         return try await CLIBridge.runStreaming(args, options: options, onLine: onLine)
     }
 

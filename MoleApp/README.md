@@ -37,6 +37,12 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 
 ## 版本记录 / Changelog
 
+### v1.4.1
+
+- 修复设置页 CLI 版本一致时仍提示"版本过低"的问题（`mo --version` 输出含 "Mole version" 前缀导致解析失败）
+- 修复卸载时取消 macOS 密码窗口后仍执行卸载的问题（不再自动回答 CLI 确认提示）
+- 修复磁盘分析进入 container 后明细仍停留在上级目录的问题（加载时清除旧数据，显示加载状态）
+
 ### v1.4.0
 
 - 状态页健康评分移至标题左侧，修复圆环上方和右侧遮挡

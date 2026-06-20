@@ -10,6 +10,11 @@ struct CLIOptions {
     /// non-interactive code paths. This is how the GUI drives `clean`,
     /// `optimize`, `purge`, and `installer` without a TTY.
     var nonInteractive: Bool = true
+    /// When true, suppresses the "y\n" auto-confirm pipe so that the CLI
+    /// aborts if the user cancels the macOS sudo auth dialog. Used for
+    /// `uninstall` where `MOLE_NON_INTERACTIVE=1` alone is sufficient
+    /// (the CLI checks that env var and skips its own confirmation prompt).
+    var noAutoConfirm: Bool = false
 
     /// Environment merged on top of the current process environment.
     func environment() -> [String: String] {
@@ -236,7 +241,7 @@ enum CLIBridge {
         let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
-        if options.nonInteractive {
+        if options.nonInteractive && !options.noAutoConfirm {
             process.standardInput = autoYesPipe()
         }
 
@@ -283,7 +288,7 @@ enum CLIBridge {
         let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
-        if options.nonInteractive {
+        if options.nonInteractive && !options.noAutoConfirm {
             process.standardInput = autoYesPipe()
         }
 

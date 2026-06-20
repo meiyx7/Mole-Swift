@@ -39,6 +39,7 @@ final class AnalyzeViewModel: ObservableObject {
     /// Navigate to a specific level in the path stack (0 = overview).
     /// Removes everything after the given index.
     func navigate(toLevel level: Int) async {
+        guard !isLoading else { return }
         if level >= pathStack.count { return }
         if level == 0 {
             await loadOverview()
@@ -55,6 +56,9 @@ final class AnalyzeViewModel: ObservableObject {
     private func fetch(path: String?) async {
         isLoading = true
         error = nil
+        // Clear stale result so the UI shows LoadingView instead of the
+        // previous directory's contents while the new scan runs.
+        result = nil
         do {
             if let path {
                 result = try await service.analyze(path: path)
@@ -63,10 +67,8 @@ final class AnalyzeViewModel: ObservableObject {
             }
         } catch {
             self.error = error.localizedDescription
-            // Clear stale result so the error is visible instead of old content.
-            // Also roll back the breadcrumb so the user isn't trapped in a
+            // Roll back the breadcrumb so the user isn't trapped in a
             // level that failed to load.
-            result = nil
             if path != nil && !pathStack.isEmpty {
                 pathStack.removeLast()
             }
