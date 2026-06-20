@@ -55,7 +55,8 @@ final class MoleService: ObservableObject {
     /// Directory-level analysis for a specific path.
     func analyze(path: String) async throws -> AnalyzeResult {
         var options = CLIOptions()
-        options.timeout = 120 // 2 minutes timeout for directory analysis
+        // Large directories like ~/Library/Containers (600+ subdirs) need more time.
+        options.timeout = 300 // 5 minutes timeout for directory analysis
         return try await CLIBridge.runDecoding(["analyze", "--json", path], as: AnalyzeResult.self, options: options)
     }
 

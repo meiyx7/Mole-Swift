@@ -68,6 +68,11 @@ struct PreviewParser {
                 if !trimmed.isEmpty { currentSection = trimmed }
                 continue
             }
+            // purge: `Purge Project Artifacts` (no prefix)
+            if line == "Purge Project Artifacts" {
+                currentSection = "Purge"
+                continue
+            }
 
             // Trailing summary variants:
             // clean:   `Potential space: 94.6MB | Items: 13 | Categories: 5`
@@ -91,6 +96,7 @@ struct PreviewParser {
             if line.hasPrefix("Purge Project Artifacts") { continue }
             if line.hasPrefix("Clean Your Mac") { continue }
             if line.hasPrefix("Installers cleaned") { continue }
+            if line.hasPrefix("Dry run complete") { continue }
 
             if let entry = parseEntry(line, section: currentSection) {
                 entries.append(entry)

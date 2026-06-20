@@ -323,19 +323,25 @@ struct CleanupScreen: View {
 
     @ViewBuilder
     private var statusPill: some View {
-        if runner.isRunning {
+        if phase == .previewing || phase == .running {
             HStack(spacing: 5) {
                 ProgressView().controlSize(.mini); Text(loc.t("运行中", "running")).font(.system(size: 10))
             }
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(.quaternary, in: Capsule())
-        } else if let code = runner.exitCode {
-            let tone: StatusTone = code == 0 ? .good : .critical
-            Text(code == 0 ? loc.t("✓ 完成", "✓ exit 0") : loc.t("退出 \(code)", "exit \(code)"))
+        } else if phase == .done {
+            let succeeded = runner.succeeded
+            Text(succeeded ? loc.t("✓ 完成", "✓ done") : loc.t("失败", "failed"))
                 .font(.system(size: 10, weight: .semibold))
                 .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Theme.color(for: tone).opacity(0.18), in: Capsule())
-                .foregroundColor(Theme.color(for: tone))
+                .background(Theme.color(for: succeeded ? .good : .critical).opacity(0.18), in: Capsule())
+                .foregroundColor(Theme.color(for: succeeded ? .good : .critical))
+        } else if phase == .error {
+            Text(loc.t("失败", "failed"))
+                .font(.system(size: 10, weight: .semibold))
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(Theme.color(for: .critical).opacity(0.18), in: Capsule())
+                .foregroundColor(Theme.color(for: .critical))
         }
     }
 
