@@ -152,18 +152,6 @@ final class MoleService: ObservableObject {
         try await CLIBridge.runStreaming(["touchid", "disable"], options: CLIOptions(), onLine: onLine)
     }
 
-    // MARK: - Completion
-
-    func completionScript(for shell: String) async -> String {
-        let result = try? await CLIBridge.run(["completion", shell])
-        return result?.stdout ?? ""
-    }
-
-    @discardableResult
-    func installCompletion(onLine: @escaping (CLIOutputLine) -> Void) async throws -> Int32 {
-        try await CLIBridge.runStreaming(["completion"], options: CLIOptions(), onLine: onLine)
-    }
-
     // MARK: - Update & remove
 
     @discardableResult

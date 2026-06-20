@@ -93,7 +93,20 @@ struct StatusView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header(snap)
-                resourceGrid(snap)
+                HStack(alignment: .top, spacing: 14) {
+                    // Left column: CPU + Memory
+                    VStack(spacing: 14) {
+                        cpuCard(snap.cpu)
+                        memoryCard(snap.memory)
+                    }
+                    // Right column: GPU + Thermal (if available)
+                    VStack(spacing: 14) {
+                        gpuCard(snap.gpu)
+                        if shouldShowThermal(snap.thermal, snap) {
+                            thermalCard(snap.thermal, snap)
+                        }
+                    }
+                }
                 disksAndNetwork(snap)
                 topProcesses(snap)
                 if !snap.processAlerts.isEmpty {
@@ -114,31 +127,21 @@ struct StatusView: View {
 
     private func healthBadge(_ snap: StatusSnapshot) -> some View {
         let tone = StatusTone.forHealthScore(snap.healthScore)
-        return HStack(spacing: 10) {
-            RingGauge(value: Double(snap.healthScore), label: loc.t("健康", "Health"), tone: tone, size: 64)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(loc.t("健康评分", "Health Score"))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .textCase(.uppercase)
-                Text(snap.healthScoreMsg)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Theme.color(for: tone))
+        return VStack(alignment: .trailing, spacing: 2) {
+            HStack(spacing: 8) {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(loc.t("健康评分", "Health Score"))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .textCase(.uppercase)
+                    Text(snap.healthScoreMsg)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(Theme.color(for: tone))
+                }
+                RingGauge(value: Double(snap.healthScore), label: loc.t("健康", "Health"), tone: tone, size: 52)
             }
         }
-        .padding(.trailing, 4)
-    }
-
-    private func resourceGrid(_ snap: StatusSnapshot) -> some View {
-        let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
-        return LazyVGrid(columns: columns, spacing: 14) {
-            cpuCard(snap.cpu)
-            memoryCard(snap.memory)
-            gpuCard(snap.gpu)
-            if shouldShowThermal(snap.thermal, snap) {
-                thermalCard(snap.thermal, snap)
-            }
-        }
+        .fixedSize()
     }
 
     /// Returns true only when at least one thermal/power metric is available.
@@ -337,12 +340,17 @@ struct StatusView: View {
     }
 
     private func disksAndNetwork(_ snap: StatusSnapshot) -> some View {
-        let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
-        return LazyVGrid(columns: columns, spacing: 14) {
-            disksCard(snap.disks, trash: snap.trashSize, trashApprox: snap.trashApprox)
-            networkCard(snap.network, history: snap.networkHistory, proxy: snap.proxy)
-            batteryCard(snap.batteries ?? [])
-            bluetoothCard(snap.bluetooth)
+        HStack(alignment: .top, spacing: 14) {
+            // Left: Storage + Battery
+            VStack(spacing: 14) {
+                disksCard(snap.disks, trash: snap.trashSize, trashApprox: snap.trashApprox)
+                batteryCard(snap.batteries ?? [])
+            }
+            // Right: Network + Bluetooth
+            VStack(spacing: 14) {
+                networkCard(snap.network, history: snap.networkHistory, proxy: snap.proxy)
+                bluetoothCard(snap.bluetooth)
+            }
         }
     }
 

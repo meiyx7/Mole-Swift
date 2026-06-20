@@ -8,8 +8,6 @@ struct SettingsView: View {
     @State private var version = ""
     @State private var touchidStatus = ""
     @State private var touchidSupported = false
-    @State private var completionScript = ""
-    @State private var selectedShell = "zsh"
     @StateObject private var runner = CommandRunner()
     @StateObject private var touchidRunner = CommandRunner()
     @State private var showRemoveAlert = false
@@ -17,8 +15,6 @@ struct SettingsView: View {
     @State private var helpText = ""
     @State private var showHelp = false
     @State private var showUpdateAlert = false
-
-    private let shells = ["bash", "zsh", "fish"]
 
     /// Minimum Mole CLI version this GUI app is compatible with.
     /// Bump when a new feature relies on CLI behavior not present in
@@ -78,7 +74,6 @@ struct SettingsView: View {
                     languageCard
                     updateCard
                     if touchidSupported { touchidCard }
-                    completionCard
                     removeCard
                     if runner.hasOutput || runner.isRunning || runner.exitCode != nil || runner.error != nil { consoleCard }
                     // About section last (reference info, low interaction).
@@ -110,7 +105,7 @@ struct SettingsView: View {
     private var header: some View {
         FeatureHeader(
             title: loc.t("设置", "Settings"),
-            subtitle: loc.t("配置 Touch ID、Shell 补全、更新与卸载。", "Configure Touch ID, shell completion, updates and removal."),
+            subtitle: loc.t("配置 Touch ID、更新与卸载。", "Configure Touch ID, updates and removal."),
             systemImage: "gearshape"
         )
     }
@@ -266,45 +261,6 @@ struct SettingsView: View {
         }
     }
 
-    private var completionCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                Label(loc.t("Shell 补全", "Shell Completion"), systemImage: "text.append")
-                    .font(.system(size: 13, weight: .semibold))
-                Text(loc.t("为你的 Shell 生成 Tab 补全脚本。", "Generate tab-completion scripts for your shell."))
-                    .font(.system(size: 11)).foregroundColor(.secondary)
-                HStack(spacing: 8) {
-                    Picker(loc.t("Shell", "Shell"), selection: $selectedShell) {
-                        ForEach(shells, id: \.self) { Text($0).tag($0) }
-                    }
-                    .pickerStyle(.segmented).frame(width: 210)
-                    Button {
-                        Task { completionScript = await service.completionScript(for: selectedShell) }
-                    } label: { Label(loc.t("生成", "Generate"), systemImage: "doc.text") }
-                        .buttonStyle(.bordered)
-                    Button {
-                        Task {
-                            await runner.run { onLine in
-                                try await service.installCompletion(onLine: onLine)
-                            }
-                        }
-                    } label: { Label(loc.t("自动安装", "Auto-install"), systemImage: "wand.and.stars") }
-                        .buttonStyle(PrimaryButtonStyle())
-                }
-                if !completionScript.isEmpty {
-                    ScrollView {
-                        Text(completionScript)
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxHeight: 160)
-                    .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-                }
-            }
-        }
-    }
-
     private var updateCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -312,14 +268,7 @@ struct SettingsView: View {
                     .font(.system(size: 13, weight: .semibold))
 
                 // GUI App update check
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(loc.t("应用更新", "App Update"))
-                            .font(.system(size: 12, weight: .medium))
-                        Text(loc.t("检查 Mole 应用最新版本。", "Check for the latest Mole app version."))
-                            .font(.system(size: 11)).foregroundColor(.secondary)
-                    }
-                    Spacer()
+                HStack(spacing: 8) {
                     Button {
                         Task { await updater.checkForUpdates() }
                     } label: {
@@ -336,6 +285,13 @@ struct SettingsView: View {
                     }
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(isCheckingUpdate)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(loc.t("应用更新", "App Update"))
+                            .font(.system(size: 12, weight: .medium))
+                        Text(loc.t("检查 Mole 应用最新版本。", "Check for the latest Mole app version."))
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                    Spacer()
                 }
 
                 if let updateMsg = updateStatusText {

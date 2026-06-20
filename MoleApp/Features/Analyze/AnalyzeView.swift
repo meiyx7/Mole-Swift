@@ -3,13 +3,15 @@ import SwiftUI
 @MainActor
 final class AnalyzeViewModel: ObservableObject {
     @Published var result: AnalyzeResult?
-    @Published var pathStack: [String] = []
+    /// Stack of (displayName, fullPath) tuples for breadcrumb navigation.
+    /// Each entry is a level the user has drilled into.
+    @Published var pathStack: [(name: String, path: String)] = []
     @Published var isLoading = false
     @Published var error: String?
 
     private let service = MoleService()
 
-    var currentPath: String { pathStack.last ?? "" }
+    var currentPath: String { pathStack.last?.path ?? "" }
     var isOverview: Bool { pathStack.isEmpty }
 
     func loadOverview() async {
@@ -17,8 +19,8 @@ final class AnalyzeViewModel: ObservableObject {
         await fetch(path: nil)
     }
 
-    func drill(into path: String) async {
-        pathStack.append(path)
+    func drill(into path: String, name: String) async {
+        pathStack.append((name: name, path: path))
         await fetch(path: path)
     }
 
@@ -150,7 +152,7 @@ struct AnalyzeView: View {
                     .font(.system(size: 9))
                     .foregroundColor(.secondary)
                 let isLast = i == vm.pathStack.count - 1
-                let name = displayName(vm.pathStack[i])
+                let name = vm.pathStack[i].name
                 if isLast {
                     Text(name)
                         .font(.system(size: 12, weight: .semibold))
@@ -175,16 +177,6 @@ struct AnalyzeView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-    }
-
-    /// Extracts a short display name from a full path.
-    private func displayName(_ path: String) -> String {
-        let home = NSHomeDirectory()
-        var display = path
-        if path.hasPrefix(home) {
-            display = "~" + path.dropFirst(home.count)
-        }
-        return (display as NSString).lastPathComponent
     }
 
     private func header(_ result: AnalyzeResult) -> some View {
@@ -245,7 +237,7 @@ struct AnalyzeView: View {
         let width = max > 0 ? CGFloat(entry.size) / CGFloat(max) : 0
         let tone: StatusTone = (entry.cleanable ?? false) ? .good : ((entry.insight ?? false) ? .warn : .neutral)
         return Button {
-            if entry.isDir { Task { await vm.drill(into: entry.path) } }
+            if entry.isDir { Task { await vm.drill(into: entry.path, name: entry.name) } }
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: entry.isDir ? "folder.fill" : "doc")
