@@ -8,6 +8,9 @@ final class AnalyzeViewModel: ObservableObject {
     @Published var pathStack: [(name: String, path: String)] = []
     @Published var isLoading = false
     @Published var error: String?
+    
+    /// Reference to localization for error messages.
+    var loc: Localization?
 
     var currentPath: String { pathStack.last?.path ?? "" }
     var isOverview: Bool { pathStack.isEmpty }
@@ -54,9 +57,6 @@ final class AnalyzeViewModel: ObservableObject {
     private func fetch(service: MoleService, path: String?) async {
         isLoading = true
         error = nil
-        // Clear stale result so the UI shows LoadingView instead of the
-        // previous directory's contents while the new scan runs.
-        result = nil
         do {
             if let path {
                 result = try await service.analyze(path: path)
@@ -64,7 +64,14 @@ final class AnalyzeViewModel: ObservableObject {
                 result = try await service.analyzeOverview()
             }
         } catch {
-            self.error = error.localizedDescription
+            // Provide a user-friendly message for timeout errors
+            let nsError = error as NSError
+            if nsError.domain == NSPOSIXErrorDomain && nsError.code == Int(SIGTERM) {
+                self.error = loc.t("扫描超时，该目录可能过大。请尝试扫描更小的子目录。", 
+                                   "Scan timed out. The directory may be too large. Try scanning a smaller subdirectory.")
+            } else {
+                self.error = error.localizedDescription
+            }
             // Roll back the breadcrumb so the user isn't trapped in a
             // level that failed to load.
             if path != nil && !pathStack.isEmpty {
@@ -79,7 +86,7 @@ struct AnalyzeView: View {
     @StateObject private var vm = AnalyzeViewModel()
     @EnvironmentObject private var service: MoleService
     @EnvironmentObject private var loc: Localization
-
+    
     var body: some View {
         Group {
             if !service.isInstalled {
@@ -118,7 +125,10 @@ struct AnalyzeView: View {
                 .help(loc.t("重新扫描", "Rescan"))
             }
         }
-        .task { if vm.result == nil { await vm.loadOverview(service: service) } }
+        .task { 
+            vm.loc = loc
+            if vm.result == nil { await vm.loadOverview(service: service) } 
+        }
         .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
             Task { await vm.refresh(service: service) }
         }
@@ -129,6 +139,16 @@ struct AnalyzeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header(result)
+                if vm.isLoading {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(loc.t("正在加载子目录…", "Loading subdirectory…"))
+                            .font(.system(size: 12)).foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+                }
                 if !vm.isOverview {
                     breadcrumbBar
                 }
@@ -249,7 +269,7 @@ struct AnalyzeView: View {
         let width = max > 0 ? CGFloat(entry.size) / CGFloat(max) : 0
         let tone: StatusTone = (entry.cleanable ?? false) ? .good : ((entry.insight ?? false) ? .warn : .neutral)
         return Button {
-            if entry.isDir { Task { await vm.drill(service: service, into: entry.path, name: entry.name) } }
+            if entry.isDir && !vm.isLoading { Task { await vm.drill(service: service, into: entry.path, name: entry.name) } }
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: entry.isDir ? "folder.fill" : "doc")

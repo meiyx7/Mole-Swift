@@ -15,6 +15,7 @@ struct InstallerView: View {
     @State private var phase: Phase = .idle
     @State private var showConfirm = false
     @State private var showRawConsole = false
+    @State private var showCategories = true
     @State private var foundFiles: [InstallerScanner.FoundFile] = []
     @State private var scanError: String?
 
@@ -131,18 +132,34 @@ struct InstallerView: View {
     private var categoriesCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                Text(loc.t("功能说明", "What this does"))
-                    .font(.system(size: 13, weight: .semibold))
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 10) {
-                    categoryRow(loc.t(".dmg 文件", ".dmg Files"), loc.t("下载与桌面目录中的磁盘镜像安装包", "Disk image installers in Downloads & Desktop"), "opticaldiscdrive")
-                    categoryRow(loc.t(".pkg 文件", ".pkg Files"), loc.t("macOS 安装包", "macOS package installers"), "archivebox")
-                    categoryRow(loc.t(".iso 文件", ".iso Files"), loc.t("光盘镜像与虚拟机安装包", "Disc images and VM installers"), "opticaldisc")
-                    categoryRow(loc.t(".xip 文件", ".xip Files"), loc.t("Apple 签名压缩包", "Apple signed archives"), "doc.zipper")
-                    categoryRow(loc.t(".zip 压缩包", ".zip Archives"), loc.t("下载目录中的压缩包", "Archives in Downloads"), "app")
-                    categoryRow(loc.t("Homebrew 缓存", "Homebrew Cache"), loc.t("Brew 下载缓存", "Brew download cache"), "internaldrive")
+                HStack {
+                    Text(loc.t("功能说明", "What this does"))
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    Button {
+                        showCategories.toggle()
+                    } label: {
+                        Image(systemName: "questionmark.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(Theme.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .help(loc.t("点击显示/隐藏功能说明", "Click to show/hide description"))
+                }
+                if showCategories {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 10) {
+                        categoryRow(loc.t(".dmg 文件", ".dmg Files"), loc.t("下载与桌面目录中的磁盘镜像安装包", "Disk image installers in Downloads & Desktop"), "opticaldiscdrive")
+                        categoryRow(loc.t(".pkg 文件", ".pkg Files"), loc.t("macOS 安装包", "macOS package installers"), "archivebox")
+                        categoryRow(loc.t(".iso 文件", ".iso Files"), loc.t("光盘镜像与虚拟机安装包", "Disc images and VM installers"), "opticaldisc")
+                        categoryRow(loc.t(".xip 文件", ".xip Files"), loc.t("Apple 签名压缩包", "Apple signed archives"), "doc.zipper")
+                        categoryRow(loc.t(".zip 压缩包", ".zip Archives"), loc.t("下载目录中的压缩包", "Archives in Downloads"), "app")
+                        categoryRow(loc.t("Homebrew 缓存", "Homebrew Cache"), loc.t("Brew 下载缓存", "Brew download cache"), "internaldrive")
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: showCategories)
     }
 
     private func categoryRow(_ name: String, _ detail: String, _ icon: String) -> some View {
@@ -294,6 +311,7 @@ struct InstallerView: View {
 
     private func scanNow() {
         phase = .scanning
+        showCategories = false
         scanError = nil
         DispatchQueue.global(qos: .userInitiated).async {
             let files = InstallerScanner.scan()

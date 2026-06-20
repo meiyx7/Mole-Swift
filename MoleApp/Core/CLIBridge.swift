@@ -15,6 +15,9 @@ struct CLIOptions {
     /// `uninstall` where `MOLE_NON_INTERACTIVE=1` alone is sufficient
     /// (the CLI checks that env var and skips its own confirmation prompt).
     var noAutoConfirm: Bool = false
+    /// Optional timeout in seconds. If the command doesn't finish within
+    /// this duration, it will be terminated. nil means no timeout.
+    var timeout: TimeInterval? = nil
 
     /// Environment merged on top of the current process environment.
     func environment() -> [String: String] {
@@ -275,7 +278,22 @@ enum CLIBridge {
         } catch {
             throw CLIBridgeError.executionFailed("\(error)")
         }
-        process.waitUntilExit()
+        
+        // Handle timeout if specified
+        if let timeout = options.timeout {
+            let timer = DispatchSource.makeTimerSource()
+            timer.schedule(deadline: .now() + timeout)
+            timer.setEventHandler {
+                if process.isRunning {
+                    process.terminate()
+                }
+            }
+            timer.resume()
+            process.waitUntilExit()
+            timer.cancel()
+        } else {
+            process.waitUntilExit()
+        }
 
         let stdout = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""

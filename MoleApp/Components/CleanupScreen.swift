@@ -26,6 +26,7 @@ struct CleanupScreen: View {
     @State private var phase: Phase = .idle
     @State private var showConfirm = false
     @State private var showRawConsole = false
+    @State private var showCategories = true
     /// Snapshot of the preview summary captured when the run starts, so the
     /// result banner can show "reclaimed X · Y items" after completion.
     @State private var previewSnapshot: PreviewParser.Summary?
@@ -170,24 +171,40 @@ struct CleanupScreen: View {
     private var categoriesCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                Text(loc.t("功能说明", "What this does"))
-                    .font(.system(size: 13, weight: .semibold))
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
-                          spacing: 10) {
-                    ForEach(categories.indices, id: \.self) { i in
-                        let c = categories[i]
-                        HStack(spacing: 10) {
-                            Image(systemName: c.icon).foregroundColor(Theme.accent).frame(width: 20)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(c.name).font(.system(size: 12, weight: .medium))
-                                Text(c.detail).font(.system(size: 10)).foregroundColor(.secondary)
+                HStack {
+                    Text(loc.t("功能说明", "What this does"))
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    Button {
+                        showCategories.toggle()
+                    } label: {
+                        Image(systemName: "questionmark.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(Theme.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .help(loc.t("点击显示/隐藏功能说明", "Click to show/hide description"))
+                }
+                if showCategories {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
+                              spacing: 10) {
+                        ForEach(categories.indices, id: \.self) { i in
+                            let c = categories[i]
+                            HStack(spacing: 10) {
+                                Image(systemName: c.icon).foregroundColor(Theme.accent).frame(width: 20)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(c.name).font(.system(size: 12, weight: .medium))
+                                    Text(c.detail).font(.system(size: 10)).foregroundColor(.secondary)
+                                }
+                                Spacer(minLength: 0)
                             }
-                            Spacer(minLength: 0)
                         }
                     }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: showCategories)
     }
 
     // MARK: - Preview card (visual + raw console toggle)
@@ -325,6 +342,7 @@ struct CleanupScreen: View {
     @MainActor
     private func runPreview() async {
         phase = .previewing
+        showCategories = false
         await runner.run { onLine in try await preview(onLine) }
         // If scan failed (error set or non-zero exit with no output),
         // go to error phase so the user can retry instead of being stuck.
@@ -353,5 +371,6 @@ struct CleanupScreen: View {
         runner.error = nil
         previewSnapshot = nil
         phase = .idle
+        showCategories = true
     }
 }
