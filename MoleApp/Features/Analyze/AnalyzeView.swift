@@ -29,6 +29,18 @@ final class AnalyzeViewModel: ObservableObject {
         }
     }
 
+    /// Navigate to a specific level in the path stack (0 = overview).
+    /// Removes everything after the given index.
+    func navigate(toLevel level: Int) async {
+        if level >= pathStack.count { return }
+        if level == 0 {
+            await loadOverview()
+        } else {
+            pathStack = Array(pathStack.prefix(level))
+            await fetch(path: currentPath)
+        }
+    }
+
     func refresh() async {
         await fetch(path: isOverview ? nil : currentPath)
     }
@@ -103,6 +115,9 @@ struct AnalyzeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header(result)
+                if !vm.isOverview {
+                    breadcrumbBar
+                }
                 summaryRow(result)
                 entriesSection(result)
                 if let largeFiles = result.largeFiles, !largeFiles.isEmpty {
@@ -112,12 +127,72 @@ struct AnalyzeView: View {
         }
     }
 
+    /// Clickable breadcrumb navigation bar. Each segment navigates to
+    /// that directory level. The last segment (current dir) is not clickable.
+    private var breadcrumbBar: some View {
+        HStack(spacing: 4) {
+            // Home / Overview button
+            Button {
+                Task { await vm.navigate(toLevel: 0) }
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 10))
+                    Text(loc.t("主目录", "Home"))
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .foregroundColor(Theme.accent)
+            }
+            .buttonStyle(.plain)
+
+            ForEach(vm.pathStack.indices, id: \.self) { i in
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+                let isLast = i == vm.pathStack.count - 1
+                let name = displayName(vm.pathStack[i])
+                if isLast {
+                    Text(name)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } else {
+                    Button {
+                        Task { await vm.navigate(toLevel: i + 1) }
+                    } label: {
+                        Text(name)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(Theme.accent)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// Extracts a short display name from a full path.
+    private func displayName(_ path: String) -> String {
+        let home = NSHomeDirectory()
+        var display = path
+        if path.hasPrefix(home) {
+            display = "~" + path.dropFirst(home.count)
+        }
+        return (display as NSString).lastPathComponent
+    }
+
     private func header(_ result: AnalyzeResult) -> some View {
         FeatureHeader(
             title: loc.t("磁盘分析", "Disk Explorer"),
             subtitle: vm.isOverview
                 ? loc.t("主目录概览", "Overview of your Home folder")
-                : breadcrumb(result.path),
+                : loc.t("子目录分析", "Subdirectory analysis"),
             systemImage: "chart.pie",
             trailing: AnyView(
                 Text(loc.t("\((result.totalFiles ?? 0) > 0 ? "\(result.totalFiles!) 项 · " : "")\(ByteFormatter.bytes(result.totalSize))", "\((result.totalFiles ?? 0) > 0 ? "\(result.totalFiles!) items · " : "")\(ByteFormatter.bytes(result.totalSize))"))

@@ -134,9 +134,32 @@ struct StatusView: View {
         return LazyVGrid(columns: columns, spacing: 14) {
             cpuCard(snap.cpu)
             memoryCard(snap.memory)
-            gpuCard(snap.gpu)
-            thermalCard(snap.thermal, snap)
+            // GPU card only shows when there's a discrete GPU with
+            // useful info. Integrated-only Macs hide it entirely.
+            if shouldShowGPU(snap.gpu) {
+                gpuCard(snap.gpu)
+            }
+            if shouldShowThermal(snap.thermal, snap) {
+                thermalCard(snap.thermal, snap)
+            }
         }
+    }
+
+    /// Returns true only when there's a discrete GPU worth showing.
+    private func shouldShowGPU(_ gpus: [GPUStatus]) -> Bool {
+        guard !gpus.isEmpty else { return false }
+        // Hide when the only GPU has no name and no usage data.
+        return gpus.contains { !$0.name.isEmpty && ($0.usage >= 0 || $0.memoryTotal > 0) }
+    }
+
+    /// Returns true only when at least one thermal/power metric is available.
+    private func shouldShowThermal(_ t: ThermalStatus, _ snap: StatusSnapshot) -> Bool {
+        let cpuTempAvailable = t.cpuTemp > 0
+        let gpuTempAvailable = t.gpuTemp > 0
+        let hasBattery = snap.batteries?.first != nil && t.batteryTemp > 0
+        let hasPower = t.systemPower > 0
+        let hasFan = t.fanCount > 0
+        return cpuTempAvailable || gpuTempAvailable || hasBattery || hasPower || hasFan
     }
 
     private func cpuCard(_ cpu: CPUStatus) -> some View {
@@ -268,20 +291,13 @@ struct StatusView: View {
     }
 
     private func thermalCard(_ t: ThermalStatus, _ snap: StatusSnapshot) -> some View {
-        // collectThermal() does not synthesize CPU temp without root access,
-        // so cpuTemp == 0 means "unavailable". Hide unavailable metrics
-        // entirely instead of showing misleading "0°C" or "N/A".
         let cpuTempAvailable = t.cpuTemp > 0
         let gpuTempAvailable = t.gpuTemp > 0
         let hasBattery = snap.batteries?.first != nil && t.batteryTemp > 0
         let hasPower = t.systemPower > 0
         let hasFan = t.fanCount > 0
-        // If nothing is available at all, don't render the card.
-        guard cpuTempAvailable || gpuTempAvailable || hasBattery || hasPower || hasFan else {
-            return AnyView(EmptyView())
-        }
         let tone: StatusTone = t.cpuTemp > 90 ? .critical : (t.cpuTemp > 75 ? .warn : .good)
-        return AnyView(Card {
+        return Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Label(loc.t("温度与电源", "Thermal & Power"), systemImage: "thermometer.medium")
@@ -314,7 +330,7 @@ struct StatusView: View {
                     }
                 }
             }
-        })
+        }
     }
 
     private func metric(_ title: String, _ value: String, tone: StatusTone) -> some View {
