@@ -12,6 +12,10 @@ final class CommandRunner: ObservableObject {
     @Published var exitCode: Int32? = nil
     @Published var error: String? = nil
 
+    /// Maximum lines retained in memory. Excess lines are dropped from the
+    /// head to prevent unbounded growth during long-running commands.
+    let maxLines = 3000
+
     private var task: Task<Void, Never>?
 
     var succeeded: Bool { exitCode == 0 }
@@ -26,7 +30,14 @@ final class CommandRunner: ObservableObject {
         task = Task { @MainActor in
             do {
                 let code = try await work { [weak self] line in
-                    Task { @MainActor in self?.lines.append(line) }
+                    Task { @MainActor in
+                        guard let self else { return }
+                        self.lines.append(line)
+                        // Bound memory: drop old lines beyond the cap.
+                        if self.lines.count > self.maxLines {
+                            self.lines.removeFirst(self.lines.count - self.maxLines)
+                        }
+                    }
                 }
                 self.exitCode = code
             } catch {
@@ -48,7 +59,13 @@ final class CommandRunner: ObservableObject {
         isRunning = true
         do {
             let code = try await work { [weak self] line in
-                Task { @MainActor in self?.lines.append(line) }
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.lines.append(line)
+                    if self.lines.count > self.maxLines {
+                        self.lines.removeFirst(self.lines.count - self.maxLines)
+                    }
+                }
             }
             self.exitCode = code
         } catch {

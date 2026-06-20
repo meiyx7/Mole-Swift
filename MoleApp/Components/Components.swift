@@ -207,6 +207,7 @@ struct LoadingView: View {
 /// Shown when the Mole CLI is not installed.
 struct CLIUnavailableView: View {
     @EnvironmentObject private var loc: Localization
+    @State private var copied = false
 
     var body: some View {
         EmptyStateView(
@@ -216,24 +217,44 @@ struct CLIUnavailableView: View {
                 "安装 Mole 以解锁此功能：\nbrew install mole",
                 "Install Mole to unlock this feature:\nbrew install mole"
             ),
-            action: (loc.t("复制安装命令", "Copy install command"), {
+            action: (copied
+                ? loc.t("已复制 ✓", "Copied ✓")
+                : loc.t("复制安装命令", "Copy install command"), {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString("brew install mole", forType: .string)
+                copied = true
+                // Reset the label after 1.5s so the user can copy again.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    withAnimation { copied = false }
+                }
             })
         )
     }
 }
 
 /// A monospaced, scrollable log viewer for streamed command output.
+///
+/// Limits the rendered lines to the most recent `maxLines` to keep
+/// performance stable during long-running commands that produce
+/// thousands of lines. Older lines are silently dropped.
 struct ConsoleOutputView: View {
     let lines: [CLIOutputLine]
     var autoScroll: Bool = true
+    /// Maximum number of lines retained for rendering. Excess lines are
+    /// dropped from the head to bound memory and diff cost.
+    var maxLines: Int = 2000
+
+    /// The slice of lines actually rendered, capped to `maxLines`.
+    private var displayedLines: [CLIOutputLine] {
+        guard lines.count > maxLines else { return lines }
+        return Array(lines.suffix(maxLines))
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 1) {
-                    ForEach(lines) { line in
+                    ForEach(displayedLines) { line in
                         Text(line.text)
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundColor(line.isError ? Color.red.opacity(0.9) : .primary)

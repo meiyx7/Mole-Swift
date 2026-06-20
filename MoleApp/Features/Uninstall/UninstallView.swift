@@ -84,6 +84,7 @@ struct UninstallView: View {
     @State private var permanent = false
     @State private var pendingDeletion: AppListEntry?
     @State private var showConfirm = false
+    @State private var showPermanentConfirm = false
     @State private var feedback: FeedbackMessage?
     @State private var uninstallingPath: String?
     @State private var feedbackTask: Task<Void, Never>?
@@ -141,10 +142,18 @@ struct UninstallView: View {
                 }
             } message: { entry in
                 Text(permanent
-                     ? loc.t("永久模式将立即删除\"\(entry.name)\"及其所有关联文件。此操作不可撤销。",
+                     ? loc.t("永久模式将立即删除\"\(entry.name)\"及其所有关联文件，无法恢复。",
                              "Permanent mode removes \"\(entry.name)\" and all associated files immediately. This cannot be undone.")
-                     : loc.t("Mole 将把\"\(entry.name)\"移至废纸篓并删除其支持文件。此操作不可撤销。",
-                             "Mole will move \"\(entry.name)\" to Trash and remove its support files. This cannot be undone."))
+                     : loc.t("Mole 将把\"\(entry.name)\"移至废纸篓并删除其支持文件，可从废纸篓恢复。",
+                             "Mole will move \"\(entry.name)\" to Trash and remove its support files. You can recover it from Trash."))
+            }
+            .alert(loc.t("启用永久删除？", "Enable permanent deletion?"),
+                   isPresented: $showPermanentConfirm) {
+                Button(loc.t("取消", "Cancel"), role: .cancel) { permanent = false }
+                Button(loc.t("启用", "Enable"), role: .destructive) { permanent = true }
+            } message: {
+                Text(loc.t("永久删除模式会跳过废纸篓，直接删除文件，无法恢复。请确认你了解此风险。",
+                           "Permanent deletion bypasses Trash and removes files immediately. This cannot be undone. Confirm only if you understand the risk."))
             }
             .task { if vm.apps.isEmpty { await vm.load(service: service) } }
             .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
@@ -161,7 +170,18 @@ struct UninstallView: View {
             subtitle: loc.t("点击应用右侧的删除按钮即可卸载，支持搜索与排序。", "Click the trash button next to an app to uninstall. Search and sort supported."),
             systemImage: "trash.slash",
             trailing: AnyView(
-                Toggle(loc.t("永久删除", "Permanent"), isOn: $permanent)
+                Toggle(loc.t("永久删除", "Permanent"), isOn: Binding(
+                    get: { permanent },
+                    set: { newValue in
+                        if newValue {
+                            // Require explicit confirmation before enabling
+                            // permanent deletion (bypasses Trash).
+                            showPermanentConfirm = true
+                        } else {
+                            permanent = false
+                        }
+                    }
+                ))
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .tint(.red)

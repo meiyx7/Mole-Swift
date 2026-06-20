@@ -12,7 +12,6 @@ struct RootView: View {
                 .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
         } detail: {
             detailView
-                .id(selection)
         }
     }
 

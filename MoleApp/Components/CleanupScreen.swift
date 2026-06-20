@@ -30,7 +30,7 @@ struct CleanupScreen: View {
     /// result banner can show "reclaimed X · Y items" after completion.
     @State private var previewSnapshot: PreviewParser.Summary?
 
-    private enum Phase: Equatable { case idle, previewing, previewed, running, done }
+    private enum Phase: Equatable { case idle, previewing, previewed, running, done, error }
 
     private var parsed: PreviewParser.Summary {
         PreviewParser.parse(runner.lines.map { $0.text })
@@ -91,7 +91,7 @@ struct CleanupScreen: View {
     }
 
     private var phaseIsAfterPreview: Bool {
-        phase == .previewed || phase == .running || phase == .done
+        phase == .previewed || phase == .running || phase == .done || phase == .error
     }
 
     private func stepDot(_ n: Int, label: String, active: Bool, done: Bool) -> some View {
@@ -154,6 +154,7 @@ struct CleanupScreen: View {
         if runner.isRunning { return false }
         if phase == .idle || phase == .previewing { return true }   // can start preview
         if phase == .previewed { return runner.hasOutput }          // can run after preview
+        if phase == .error { return true }                          // can retry from error
         return false                                                // running/done
     }
 
@@ -167,6 +168,8 @@ struct CleanupScreen: View {
             return loc.t("运行中…", "Running…")
         case .done:
             return loc.t("已完成", "Done")
+        case .error:
+            return loc.t("重试预览", "Retry preview")
         }
     }
 
@@ -176,6 +179,7 @@ struct CleanupScreen: View {
         case .previewed:         return systemImage
         case .running:           return "circle.dashed"
         case .done:              return "checkmark.circle.fill"
+        case .error:             return "arrow.clockwise"
         }
     }
 
@@ -309,6 +313,7 @@ struct CleanupScreen: View {
         case .previewed: return loc.t("预览完成", "Preview ready")
         case .running: return loc.t("运行中…", "Running…")
         case .done: return loc.t("已完成", "Finished")
+        case .error: return loc.t("预览失败", "Preview failed")
         }
     }
 
@@ -334,7 +339,13 @@ struct CleanupScreen: View {
     private func runPreview() async {
         phase = .previewing
         await runner.run { onLine in try await preview(onLine) }
-        phase = .previewed
+        // If preview failed (error set or non-zero exit with no output),
+        // go to error phase so the user can retry instead of being stuck.
+        if runner.error != nil || (runner.exitCode != nil && runner.exitCode != 0 && !runner.hasOutput) {
+            phase = .error
+        } else {
+            phase = .previewed
+        }
     }
 
     private func runNow() {

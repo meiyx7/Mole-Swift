@@ -18,9 +18,10 @@ enum Language: String, CaseIterable, Identifiable {
     }
 }
 
-/// Observable language controller. Defaults to Chinese (`zh`) on first launch,
-/// persists the choice to UserDefaults, and drives live re-rendering of every
-/// view that observes it.
+/// Observable language controller. On first launch, picks the system
+/// preferred language (English for en-based locales, Chinese otherwise),
+/// then persists the user's explicit choice to UserDefaults for subsequent
+/// launches. Drives live re-rendering of every view that observes it.
 ///
 /// Not `@MainActor`-isolated so that non-view helpers (e.g. `Feature.title`)
 /// can call `t(_:_:)` synchronously. All mutations happen from `@MainActor`
@@ -32,8 +33,25 @@ final class Localization: ObservableObject {
 
     init() {
         let stored = UserDefaults.standard.string(forKey: Self.storageKey)
-        // Default to Chinese when nothing (or an unknown value) is stored.
-        self.language = Language(rawValue: stored ?? "") ?? .zh
+        if let lang = stored.flatMap({ Language(rawValue: $0) }) {
+            // User has explicitly chosen a language before.
+            self.language = lang
+        } else {
+            // First launch: follow the system preferred language.
+            self.language = Self.detectSystemLanguage()
+        }
+    }
+
+    /// Detects the system preferred language and maps it to a supported
+    /// `Language`. Falls back to English for any locale we don't recognise
+    /// as Chinese, so non-CJK users get English instead of Chinese.
+    private static func detectSystemLanguage() -> Language {
+        let preferred = Locale.preferredLanguages.first ?? "en"
+        // Locale identifier like "zh-Hans-CN", "en-US", "ja-JP".
+        if preferred.lowercased().hasPrefix("zh") {
+            return .zh
+        }
+        return .en
     }
 
     /// Updates the active language and persists the choice.

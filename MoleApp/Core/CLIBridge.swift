@@ -196,6 +196,7 @@ enum CLIBridge {
         onLine: @escaping (CLIOutputLine) -> Void
     ) async throws -> Int32 {
         guard let binary = CLILocator.resolve() else { throw CLIBridgeError.binaryMissing }
+        let taskID = UUID()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 DispatchQueue.global(qos: .userInitiated).async {
@@ -204,6 +205,7 @@ enum CLIBridge {
                             binary: binary,
                             args: args,
                             options: options,
+                            taskID: taskID,
                             onLine: onLine
                         )
                         continuation.resume(returning: code)
@@ -213,7 +215,7 @@ enum CLIBridge {
                 }
             }
         } onCancel: {
-            streamingTerminator?.terminate()
+            terminateStreaming(taskID: taskID)
         }
     }
 
@@ -226,7 +228,30 @@ enum CLIBridge {
 
     // MARK: - Private process plumbing
 
-    private static var streamingTerminator: Process?
+    /// Tracks active streaming processes by task ID so concurrent streams
+    /// don't clobber each other's cancellation handle. Protected by a
+    /// lock because multiple streams can run simultaneously.
+    private static let streamingProcessesLock = NSLock()
+    private static var streamingProcesses: [UUID: Process] = [:]
+
+    private static func registerStreaming(taskID: UUID, process: Process) {
+        streamingProcessesLock.lock()
+        streamingProcesses[taskID] = process
+        streamingProcessesLock.unlock()
+    }
+
+    private static func unregisterStreaming(taskID: UUID) {
+        streamingProcessesLock.lock()
+        streamingProcesses.removeValue(forKey: taskID)
+        streamingProcessesLock.unlock()
+    }
+
+    private static func terminateStreaming(taskID: UUID) {
+        streamingProcessesLock.lock()
+        let process = streamingProcesses[taskID]
+        streamingProcessesLock.unlock()
+        process?.terminate()
+    }
 
     private static func capture(binary: String, args: [String], options: CLIOptions) throws -> CLIResult {
         let process = Process()
@@ -281,6 +306,7 @@ enum CLIBridge {
         binary: String,
         args: [String],
         options: CLIOptions,
+        taskID: UUID,
         onLine: @escaping (CLIOutputLine) -> Void
     ) throws -> Int32 {
         let process = Process()
@@ -298,8 +324,6 @@ enum CLIBridge {
         if options.nonInteractive {
             process.standardInput = nonInteractiveStdin()
         }
-
-        streamingTerminator = process
 
         let lock = NSLock()
 
@@ -331,9 +355,10 @@ enum CLIBridge {
         do {
             try process.run()
         } catch {
-            streamingTerminator = nil
             throw CLIBridgeError.executionFailed("\(error)")
         }
+        // Register after successful launch so cancellation can terminate it.
+        registerStreaming(taskID: taskID, process: process)
 
         let outHandle = outPipe.fileHandleForReading
         let errHandle = errPipe.fileHandleForReading
@@ -350,7 +375,7 @@ enum CLIBridge {
         process.waitUntilExit()
         outSemaphore.wait()
         errSemaphore.wait()
-        streamingTerminator = nil
+        unregisterStreaming(taskID: taskID)
         return process.terminationStatus
     }
 }

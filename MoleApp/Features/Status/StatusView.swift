@@ -8,9 +8,13 @@ final class StatusViewModel: ObservableObject {
     @Published var error: String?
     @Published var isLive = false
 
-    private var timer: Timer?
-    private let interval: TimeInterval = 3.0
+    private var refreshTask: Task<Void, Never>?
+    private let interval: TimeInterval = 5.0
     private weak var liveService: MoleService?
+    /// Guards against overlapping refreshes: if the previous snapshot
+    /// request hasn't finished (e.g. CLI hung), skip the next tick instead
+    /// of piling up concurrent `mo status` processes.
+    private var isRefreshing = false
 
     func load(service: MoleService) async {
         isLoading = true
@@ -27,16 +31,29 @@ final class StatusViewModel: ObservableObject {
         guard !isLive else { return }
         isLive = true
         liveService = service
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
-            guard let svc = self.liveService else { return }
-            Task { await self.load(service: svc) }
+        startRefreshLoop()
+    }
+
+    private func startRefreshLoop() {
+        refreshTask?.cancel()
+        refreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64((self?.interval ?? 5) * 1_000_000_000))
+                guard let self, !Task.isCancelled, self.isLive else { return }
+                // Skip if a previous refresh is still in flight.
+                guard !self.isRefreshing else { continue }
+                guard let svc = self.liveService else { return }
+                self.isRefreshing = true
+                await self.load(service: svc)
+                self.isRefreshing = false
+            }
         }
     }
 
     func stopLive() {
         isLive = false
-        timer?.invalidate()
-        timer = nil
+        refreshTask?.cancel()
+        refreshTask = nil
         liveService = nil
     }
 }
@@ -76,7 +93,7 @@ struct StatusView: View {
                 )) {
                     Label(vm.isLive ? loc.t("实时", "Live") : loc.t("已暂停", "Paused"), systemImage: vm.isLive ? "pause.fill" : "play.fill")
                 }
-                .help(loc.t("切换实时刷新（每 3 秒）", "Toggle live refresh (every 3s)"))
+                .help(loc.t("切换实时刷新（每 5 秒）", "Toggle live refresh (every 5s)"))
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { Task { await vm.load(service: service) } } label: {
