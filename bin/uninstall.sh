@@ -1385,6 +1385,9 @@ main() {
             "--permanent")
                 export MOLE_DELETE_MODE="permanent"
                 ;;
+            "--non-interactive")
+                export MOLE_NON_INTERACTIVE=1
+                ;;
             "--list")
                 list_mode=1
                 ;;
@@ -1476,8 +1479,11 @@ main() {
             echo "Proceeding with uninstallation (non-interactive mode)..."
         fi
 
+        set +e
         batch_uninstall_applications
-        return 0
+        local _batch_rc=$?
+        set -e
+        return $_batch_rc
     fi
 
     local first_scan=true

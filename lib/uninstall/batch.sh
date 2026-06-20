@@ -687,7 +687,11 @@ _batch_preview_and_confirm() {
 
         if ! ensure_sudo_session "$admin_prompt"; then
             echo ""
-            log_error "Admin access denied"
+            if [[ "${MOLE_NON_INTERACTIVE:-0}" == "1" ]]; then
+                log_error "Admin access required but unavailable in non-interactive mode. Grant sudo access to the Mole CLI or use the Touch ID feature in Settings."
+            else
+                log_error "Admin access denied"
+            fi
             return 1
         fi
     fi

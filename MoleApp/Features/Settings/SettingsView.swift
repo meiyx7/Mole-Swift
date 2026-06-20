@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var service: MoleService
     @EnvironmentObject private var loc: Localization
+    @EnvironmentObject private var updater: UpdateChecker
     @State private var version = ""
     @State private var touchidStatus = ""
     @State private var completionScript = ""
@@ -13,8 +14,14 @@ struct SettingsView: View {
     @State private var removePreview = ""
     @State private var helpText = ""
     @State private var showHelp = false
+    @State private var showUpdateAlert = false
 
     private let shells = ["bash", "zsh", "fish"]
+
+    /// GUI version read from the main Bundle (not hardcoded).
+    private var guiVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+    }
 
     var body: some View {
         if !service.isInstalled {
@@ -46,6 +53,9 @@ struct SettingsView: View {
             .task {
                 version = await service.version()
                 touchidStatus = await service.touchidStatus()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .moleCheckUpdates)) { _ in
+                Task { await updater.checkForUpdates() }
             }
         }
     }
@@ -105,7 +115,7 @@ struct SettingsView: View {
                 HStack {
                     Label(loc.t("GUI 版本", "GUI Version"), systemImage: "app").foregroundColor(.secondary)
                     Spacer()
-                    Text("Mole 1.0.0")
+                    Text("Mole \(guiVersion)")
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 }
                 Divider()
@@ -233,6 +243,61 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Label(loc.t("更新 Mole", "Update Mole"), systemImage: "arrow.up.circle")
                     .font(.system(size: 13, weight: .semibold))
+
+                // GUI App update check
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(loc.t("应用更新", "App Update"))
+                            .font(.system(size: 12, weight: .medium))
+                        Text(loc.t("检查 Mole 应用最新版本。", "Check for the latest Mole app version."))
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        Task { await updater.checkForUpdates() }
+                    } label: {
+                        HStack(spacing: 4) {
+                            if case .checking = updater.state {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                            }
+                            Text(loc.t("检查更新", "Check"))
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(isCheckingUpdate)
+                }
+
+                if let updateMsg = updateStatusText {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: updateMsg.icon)
+                            .foregroundColor(updateMsg.color)
+                            .font(.system(size: 11))
+                        Text(updateMsg.text)
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        if case .available = updater.state {
+                            Button(loc.t("下载", "Download")) {
+                                if case .available(_, let url, _) = updater.state {
+                                    if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+                                }
+                            }
+                            .font(.system(size: 11, weight: .medium))
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Divider()
+
+                Text(loc.t("CLI 更新", "CLI Update"))
+                    .font(.system(size: 12, weight: .medium))
                 Text(loc.t("检查并安装最新版本的 Mole CLI。", "Check for and install the latest version of the Mole CLI."))
                     .font(.system(size: 11)).foregroundColor(.secondary)
                 HStack(spacing: 8) {
@@ -258,6 +323,42 @@ struct SettingsView: View {
                         .disabled(runner.isRunning)
                 }
             }
+        }
+    }
+
+    private var isCheckingUpdate: Bool {
+        if case .checking = updater.state { return true }
+        return false
+    }
+
+    private struct UpdateStatus {
+        let text: String
+        let icon: String
+        let color: Color
+    }
+
+    private var updateStatusText: UpdateStatus? {
+        switch updater.state {
+        case .idle, .checking:
+            return nil
+        case .upToDate:
+            return UpdateStatus(
+                text: loc.t("已是最新版本。", "You're up to date."),
+                icon: "checkmark.circle.fill",
+                color: .green
+            )
+        case .available(let v, _, _):
+            return UpdateStatus(
+                text: loc.t("发现新版本 \(v)，点击下载。", "Version \(v) is available. Click to download."),
+                icon: "arrow.up.circle.fill",
+                color: .blue
+            )
+        case .error(let msg):
+            return UpdateStatus(
+                text: loc.t("检查失败：\(msg)", "Check failed: \(msg)"),
+                icon: "exclamationmark.triangle.fill",
+                color: .orange
+            )
         }
     }
 

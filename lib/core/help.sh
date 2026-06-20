@@ -71,6 +71,7 @@ show_uninstall_help() {
     echo "  --list            List installed apps with the exact name mo uninstall accepts"
     echo "  --dry-run         Preview app uninstallation without making changes"
     echo "  --permanent       Bypass macOS Trash and rm -rf immediately"
+    echo "  --non-interactive Skip confirmation prompts (for GUI/ci callers)"
     echo "  --whitelist       Not supported for uninstall (use clean/optimize)"
     echo "  --debug           Show detailed operation logs"
     echo "  -h, --help        Show this help message"
