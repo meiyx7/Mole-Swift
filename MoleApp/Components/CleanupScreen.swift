@@ -32,6 +32,33 @@ struct CleanupScreen: View {
 
     private enum Phase: Equatable { case idle, previewing, previewed, running, done, error }
 
+    /// Custom initialiser so callers can pass trailing closures (preview/run)
+    /// before the optional confirm/action label parameters, matching the
+    /// natural call site order: `CleanupScreen(... essentials ...) { preview } run: { run }`.
+    init(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        categories: [(name: String, detail: String, icon: String)],
+        previewHint: String,
+        preview: @escaping @MainActor (CLIOutputLine) async throws -> Int32,
+        run: @escaping @MainActor (CLIOutputLine) async throws -> Int32,
+        confirmTitle: String? = nil,
+        confirmMessage: String? = nil,
+        actionLabel: String? = nil
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.systemImage = systemImage
+        self.categories = categories
+        self.previewHint = previewHint
+        self.preview = preview
+        self.run = run
+        self.confirmTitle = confirmTitle
+        self.confirmMessage = confirmMessage
+        self.actionLabel = actionLabel
+    }
+
     private var parsed: PreviewParser.Summary {
         PreviewParser.parse(runner.lines.map { $0.text })
     }
