@@ -102,7 +102,7 @@ struct PreviewParser {
             }
         }
 
-        DebugLog.log("PreviewParser: \(entries.count) entries, section=\(currentSection), space=\(totalSpace ?? "nil")")
+        DebugLog.append("PreviewParser: \(entries.count) entries, section=\(currentSection), space=\(totalSpace ?? "nil")")
         return Summary(entries: entries, totalSpaceText: totalSpace, totalItems: totalItems, totalCategories: totalCategories)
     }
 
