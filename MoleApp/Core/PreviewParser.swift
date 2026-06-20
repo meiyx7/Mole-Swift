@@ -93,7 +93,6 @@ struct PreviewParser {
             if line.hasPrefix("◎ System caches need sudo") { continue }
             if line.hasPrefix("⚙") { continue }
             if line.hasPrefix("✓ Whitelist") { continue }
-            if line.hasPrefix("Purge Project Artifacts") { continue }
             if line.hasPrefix("Clean Your Mac") { continue }
             if line.hasPrefix("Installers cleaned") { continue }
             if line.hasPrefix("Dry run complete") { continue }
@@ -103,6 +102,7 @@ struct PreviewParser {
             }
         }
 
+        DebugLog.log("PreviewParser: \(entries.count) entries, section=\(currentSection), space=\(totalSpace ?? "nil")")
         return Summary(entries: entries, totalSpaceText: totalSpace, totalItems: totalItems, totalCategories: totalCategories)
     }
 

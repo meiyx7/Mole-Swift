@@ -140,18 +140,15 @@ struct AnalyzeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header(result)
-                if vm.isLoading {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text(loc.t("正在加载子目录…", "Loading subdirectory…"))
-                            .font(.system(size: 12)).foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-                }
                 if !vm.isOverview {
                     breadcrumbBar
+                }
+                if vm.isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                        .transition(.opacity)
                 }
                 summaryRow(result)
                 entriesSection(result)
@@ -160,6 +157,7 @@ struct AnalyzeView: View {
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: vm.isLoading)
     }
 
     /// Clickable breadcrumb navigation bar. Each segment navigates to
