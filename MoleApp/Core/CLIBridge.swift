@@ -241,8 +241,8 @@ enum CLIBridge {
         let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
-        if options.nonInteractive && !options.noAutoConfirm {
-            process.standardInput = autoYesPipe()
+        if options.nonInteractive {
+            process.standardInput = nonInteractiveStdin()
         }
 
         do {
@@ -257,17 +257,24 @@ enum CLIBridge {
         return CLIResult(exitCode: process.terminationStatus, stdout: stdout, stderr: stderr)
     }
 
-    /// Creates a pipe pre-loaded with "y\n" so that any confirmation
-    /// prompt from the CLI (e.g. "Proceed with uninstallation? [y/N]")
-    /// is automatically answered "yes". This is needed because the
-    /// installed `mo` CLI may be an upstream version that doesn't
-    /// check the MOLE_NON_INTERACTIVE environment variable.
-    private static func autoYesPipe() -> Pipe {
-        let pipe = Pipe()
-        let data = "y\n".data(using: .utf8) ?? Data()
-        try? pipe.fileHandleForWriting.write(contentsOf: data)
-        try? pipe.fileHandleForWriting.close()
-        return pipe
+    /// Returns a stdin handle that yields immediate EOF.
+    ///
+    /// The GUI sets `MOLE_NON_INTERACTIVE=1` so the CLI skips its own
+    /// confirmation prompts (the user already confirmed in the app's UI).
+    /// Stdin is wired to `/dev/null` rather than a "y\n" pipe so that any
+    /// unexpected prompt — including from an upstream CLI that ignores the
+    /// env var — hits EOF and fails safely instead of being auto-confirmed.
+    /// Auto-yesing a destructive prompt the user never saw is the failure
+    /// mode this guard exists to prevent. This applies to all nonInteractive
+    /// paths; the legacy `noAutoConfirm` flag is now a no-op kept only for
+    /// source compatibility with callers that still set it.
+    private static func nonInteractiveStdin() -> FileHandle {
+        return FileHandle(forReadingAtPath: "/dev/null") ?? {
+            // Fallback: a closed pipe also yields EOF.
+            let pipe = Pipe()
+            try? pipe.fileHandleForWriting.close()
+            return pipe.fileHandleForReading
+        }()
     }
 
     private static func stream(
@@ -288,8 +295,8 @@ enum CLIBridge {
         let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
-        if options.nonInteractive && !options.noAutoConfirm {
-            process.standardInput = autoYesPipe()
+        if options.nonInteractive {
+            process.standardInput = nonInteractiveStdin()
         }
 
         streamingTerminator = process

@@ -9,8 +9,6 @@ final class UninstallViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
 
-    private let service = MoleService()
-
     enum SortField: String, CaseIterable, Identifiable {
         case size, date, name
         var id: String { rawValue }
@@ -62,7 +60,7 @@ final class UninstallViewModel: ObservableObject {
         }
     }
 
-    func load() async {
+    func load(service: MoleService) async {
         isLoading = true
         error = nil
         do {
@@ -111,7 +109,7 @@ struct UninstallView: View {
                             EmptyStateView(systemImage: "exclamationmark.triangle",
                                            title: loc.t("无法列出应用", "Couldn't list apps"),
                                            message: error,
-                                           action: (loc.t("重试", "Retry"), { Task { await vm.load() } }))
+                                           action: (loc.t("重试", "Retry"), { Task { await vm.load(service: service) } }))
                         } else if vm.apps.isEmpty && vm.isLoading {
                             LoadingView(title: loc.t("正在扫描应用…", "Scanning applications…"))
                         } else if vm.apps.isEmpty {
@@ -130,7 +128,7 @@ struct UninstallView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { Task { await vm.load() } } label: { Image(systemName: "arrow.clockwise") }
+                    Button { Task { await vm.load(service: service) } } label: { Image(systemName: "arrow.clockwise") }
                         .help(loc.t("重新扫描应用", "Rescan apps"))
                 }
             }
@@ -148,9 +146,9 @@ struct UninstallView: View {
                      : loc.t("Mole 将把\"\(entry.name)\"移至废纸篓并删除其支持文件。此操作不可撤销。",
                              "Mole will move \"\(entry.name)\" to Trash and remove its support files. This cannot be undone."))
             }
-            .task { if vm.apps.isEmpty { await vm.load() } }
+            .task { if vm.apps.isEmpty { await vm.load(service: service) } }
             .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
-                Task { await vm.load() }
+                Task { await vm.load(service: service) }
             }
         }
     }

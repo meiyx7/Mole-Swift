@@ -10,23 +10,26 @@ final class StatusViewModel: ObservableObject {
 
     private var timer: Timer?
     private let interval: TimeInterval = 3.0
+    private weak var liveService: MoleService?
 
-    func load() async {
+    func load(service: MoleService) async {
         isLoading = true
         error = nil
         do {
-            snapshot = try await MoleService().statusSnapshot()
+            snapshot = try await service.statusSnapshot()
         } catch {
             self.error = error.localizedDescription
         }
         isLoading = false
     }
 
-    func startLive() {
+    func startLive(service: MoleService) {
         guard !isLive else { return }
         isLive = true
+        liveService = service
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
-            Task { await self.load() }
+            guard let svc = self.liveService else { return }
+            Task { await self.load(service: svc) }
         }
     }
 
@@ -34,6 +37,7 @@ final class StatusViewModel: ObservableObject {
         isLive = false
         timer?.invalidate()
         timer = nil
+        liveService = nil
     }
 }
 
@@ -54,12 +58,12 @@ struct StatusView: View {
                 EmptyStateView(systemImage: "exclamationmark.triangle",
                                title: loc.t("无法加载状态", "Couldn't load status"),
                                message: error,
-                               action: (loc.t("重试", "Retry"), { Task { await vm.load() } }))
+                               action: (loc.t("重试", "Retry"), { Task { await vm.load(service: service) } }))
             } else {
                 EmptyStateView(systemImage: "heart.text.square",
                                title: loc.t("系统状态", "System status"),
                                message: loc.t("加载 Mac 健康状态的实时快照。", "Load a live snapshot of your Mac's health."),
-                               action: (loc.t("加载状态", "Load status"), { Task { await vm.load() } }))
+                               action: (loc.t("加载状态", "Load status"), { Task { await vm.load(service: service) } }))
             }
         }
         .featurePadding()
@@ -68,23 +72,23 @@ struct StatusView: View {
             ToolbarItem(placement: .primaryAction) {
                 Toggle(isOn: Binding(
                     get: { vm.isLive },
-                    set: { $0 ? vm.startLive() : vm.stopLive() }
+                    set: { $0 ? vm.startLive(service: service) : vm.stopLive() }
                 )) {
                     Label(vm.isLive ? loc.t("实时", "Live") : loc.t("已暂停", "Paused"), systemImage: vm.isLive ? "pause.fill" : "play.fill")
                 }
                 .help(loc.t("切换实时刷新（每 3 秒）", "Toggle live refresh (every 3s)"))
             }
             ToolbarItem(placement: .primaryAction) {
-                Button { Task { await vm.load() } } label: {
+                Button { Task { await vm.load(service: service) } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
                 .help(loc.t("立即刷新", "Refresh now"))
             }
         }
-        .task { await vm.load() }
+        .task { await vm.load(service: service) }
         .onDisappear { vm.stopLive() }
         .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
-            Task { await vm.load() }
+            Task { await vm.load(service: service) }
         }
     }
 

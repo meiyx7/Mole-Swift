@@ -82,7 +82,9 @@ final class MoleService: ObservableObject {
     /// Runs the real cleanup, streaming progress.
     @discardableResult
     func clean(onLine: @escaping (CLIOutputLine) -> Void) async throws -> Int32 {
-        try await CLIBridge.runStreaming(["clean"], options: CLIOptions(), onLine: onLine)
+        var options = CLIOptions()
+        options.nonInteractive = true
+        return try await CLIBridge.runStreaming(["clean"], options: options, onLine: onLine)
     }
 
     // MARK: - Optimize
@@ -91,12 +93,15 @@ final class MoleService: ObservableObject {
     func optimizePreview(onLine: @escaping (CLIOutputLine) -> Void) async throws -> Int32 {
         var options = CLIOptions()
         options.dryRun = true
+        options.nonInteractive = true
         return try await CLIBridge.runStreaming(["optimize", "--dry-run"], options: options, onLine: onLine)
     }
 
     @discardableResult
     func optimize(onLine: @escaping (CLIOutputLine) -> Void) async throws -> Int32 {
-        try await CLIBridge.runStreaming(["optimize"], options: CLIOptions(), onLine: onLine)
+        var options = CLIOptions()
+        options.nonInteractive = true
+        return try await CLIBridge.runStreaming(["optimize"], options: options, onLine: onLine)
     }
 
     // MARK: - Purge
@@ -105,12 +110,15 @@ final class MoleService: ObservableObject {
     func purgePreview(onLine: @escaping (CLIOutputLine) -> Void) async throws -> Int32 {
         var options = CLIOptions()
         options.dryRun = true
+        options.nonInteractive = true
         return try await CLIBridge.runStreaming(["purge", "--dry-run"], options: options, onLine: onLine)
     }
 
     @discardableResult
     func purge(onLine: @escaping (CLIOutputLine) -> Void) async throws -> Int32 {
-        try await CLIBridge.runStreaming(["purge"], options: CLIOptions(), onLine: onLine)
+        var options = CLIOptions()
+        options.nonInteractive = true
+        return try await CLIBridge.runStreaming(["purge"], options: options, onLine: onLine)
     }
 
     // MARK: - Installer
@@ -125,7 +133,9 @@ final class MoleService: ObservableObject {
 
     @discardableResult
     func installer(onLine: @escaping (CLIOutputLine) -> Void) async throws -> Int32 {
-        try await CLIBridge.runStreaming(["installer"], options: CLIOptions(), onLine: onLine)
+        var options = CLIOptions()
+        options.nonInteractive = true
+        return try await CLIBridge.runStreaming(["installer"], options: options, onLine: onLine)
     }
 
     // MARK: - Uninstall (destructive)

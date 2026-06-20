@@ -7,9 +7,7 @@ final class HistoryViewModel: ObservableObject {
     @Published var error: String?
     @Published var expanded: Set<String> = []
 
-    private let service = MoleService()
-
-    func load() async {
+    func load(service: MoleService) async {
         isLoading = true
         error = nil
         do {
@@ -43,25 +41,25 @@ struct HistoryView: View {
                 EmptyStateView(systemImage: "exclamationmark.triangle",
                                title: loc.t("无法加载历史记录", "Couldn't load history"),
                                message: error,
-                               action: (loc.t("重试", "Retry"), { Task { await vm.load() } }))
+                               action: (loc.t("重试", "Retry"), { Task { await vm.load(service: service) } }))
             } else {
                 EmptyStateView(systemImage: "clock.arrow.circlepath",
                                title: loc.t("清理历史", "Cleanup History"),
                                message: loc.t("查看 Mole 历次清理的完整记录。", "Review everything Mole has cleaned over time."),
-                               action: (loc.t("加载历史", "Load history"), { Task { await vm.load() } }))
+                               action: (loc.t("加载历史", "Load history"), { Task { await vm.load(service: service) } }))
             }
         }
         .featurePadding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { Task { await vm.load() } } label: { Image(systemName: "arrow.clockwise") }
+                Button { Task { await vm.load(service: service) } } label: { Image(systemName: "arrow.clockwise") }
                     .help(loc.t("刷新历史", "Refresh history"))
             }
         }
-        .task { if vm.result == nil { await vm.load() } }
+        .task { if vm.result == nil { await vm.load(service: service) } }
         .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
-            Task { await vm.load() }
+            Task { await vm.load(service: service) }
         }
     }
 

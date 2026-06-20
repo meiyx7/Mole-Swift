@@ -9,51 +9,49 @@ final class AnalyzeViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
 
-    private let service = MoleService()
-
     var currentPath: String { pathStack.last?.path ?? "" }
     var isOverview: Bool { pathStack.isEmpty }
 
-    func loadOverview() async {
+    func loadOverview(service: MoleService) async {
         pathStack.removeAll()
-        await fetch(path: nil)
+        await fetch(service: service, path: nil)
     }
 
-    func drill(into path: String, name: String) async {
+    func drill(service: MoleService, into path: String, name: String) async {
         // Prevent drilling while a scan is already running (avoids race
         // conditions where rapid clicks pile up breadcrumb entries).
         guard !isLoading else { return }
         // Prevent drilling into the same path (avoids duplicate breadcrumb entries).
         guard path != currentPath else { return }
         pathStack.append((name: name, path: path))
-        await fetch(path: path)
+        await fetch(service: service, path: path)
     }
 
-    func goBack() async {
+    func goBack(service: MoleService) async {
         if !pathStack.isEmpty {
             pathStack.removeLast()
-            await fetch(path: pathStack.isEmpty ? nil : currentPath)
+            await fetch(service: service, path: pathStack.isEmpty ? nil : currentPath)
         }
     }
 
     /// Navigate to a specific level in the path stack (0 = overview).
     /// Removes everything after the given index.
-    func navigate(toLevel level: Int) async {
+    func navigate(service: MoleService, toLevel level: Int) async {
         guard !isLoading else { return }
         if level >= pathStack.count { return }
         if level == 0 {
-            await loadOverview()
+            await loadOverview(service: service)
         } else {
             pathStack = Array(pathStack.prefix(level))
-            await fetch(path: currentPath)
+            await fetch(service: service, path: currentPath)
         }
     }
 
-    func refresh() async {
-        await fetch(path: isOverview ? nil : currentPath)
+    func refresh(service: MoleService) async {
+        await fetch(service: service, path: isOverview ? nil : currentPath)
     }
 
-    private func fetch(path: String?) async {
+    private func fetch(service: MoleService, path: String?) async {
         isLoading = true
         error = nil
         // Clear stale result so the UI shows LoadingView instead of the
@@ -94,12 +92,12 @@ struct AnalyzeView: View {
                 EmptyStateView(systemImage: "exclamationmark.triangle",
                                title: loc.t("扫描失败", "Scan failed"),
                                message: error,
-                               action: (loc.t("重试", "Retry"), { Task { await vm.refresh() } }))
+                               action: (loc.t("重试", "Retry"), { Task { await vm.refresh(service: service) } }))
             } else {
                 EmptyStateView(systemImage: "chart.pie",
                                title: loc.t("磁盘分析", "Disk Explorer"),
                                message: loc.t("可视化查看 Mac 上的空间占用。", "Visualise what's taking up space on your Mac."),
-                               action: (loc.t("扫描主目录", "Scan Home folder"), { Task { await vm.loadOverview() } }))
+                               action: (loc.t("扫描主目录", "Scan Home folder"), { Task { await vm.loadOverview(service: service) } }))
             }
         }
         .featurePadding()
@@ -107,22 +105,22 @@ struct AnalyzeView: View {
         .toolbar {
             if !vm.pathStack.isEmpty {
                 ToolbarItem(placement: .navigation) {
-                    Button { Task { await vm.goBack() } } label: {
+                    Button { Task { await vm.goBack(service: service) } } label: {
                         Image(systemName: "chevron.left")
                     }
                     .help(loc.t("返回", "Back"))
                 }
             }
             ToolbarItem(placement: .primaryAction) {
-                Button { Task { await vm.refresh() } } label: {
+                Button { Task { await vm.refresh(service: service) } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
                 .help(loc.t("重新扫描", "Rescan"))
             }
         }
-        .task { if vm.result == nil { await vm.loadOverview() } }
+        .task { if vm.result == nil { await vm.loadOverview(service: service) } }
         .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
-            Task { await vm.refresh() }
+            Task { await vm.refresh(service: service) }
         }
     }
 
@@ -149,7 +147,7 @@ struct AnalyzeView: View {
         HStack(spacing: 4) {
             // Home / Overview button
             Button {
-                Task { await vm.navigate(toLevel: 0) }
+                Task { await vm.navigate(service: service, toLevel: 0) }
             } label: {
                 HStack(spacing: 3) {
                     Image(systemName: "house.fill")
@@ -175,7 +173,7 @@ struct AnalyzeView: View {
                         .truncationMode(.middle)
                 } else {
                     Button {
-                        Task { await vm.navigate(toLevel: i + 1) }
+                        Task { await vm.navigate(service: service, toLevel: i + 1) }
                     } label: {
                         Text(name)
                             .font(.system(size: 12, weight: .medium))
@@ -251,7 +249,7 @@ struct AnalyzeView: View {
         let width = max > 0 ? CGFloat(entry.size) / CGFloat(max) : 0
         let tone: StatusTone = (entry.cleanable ?? false) ? .good : ((entry.insight ?? false) ? .warn : .neutral)
         return Button {
-            if entry.isDir { Task { await vm.drill(into: entry.path, name: entry.name) } }
+            if entry.isDir { Task { await vm.drill(service: service, into: entry.path, name: entry.name) } }
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: entry.isDir ? "folder.fill" : "doc")

@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// A reusable screen for the preview → confirm → run cleanup commands
-/// (Optimize, Purge, Installer). Each provides its title, categories, and the
-/// two service calls; this view handles the lifecycle, the visual preview, and
-/// the raw console fallback.
+/// (Clean, Optimize, Purge, Installer). Each provides its title, categories,
+/// the two service calls, and optional confirmation/result copy; this view
+/// handles the lifecycle, the visual preview, and the raw console fallback.
 struct CleanupScreen: View {
     let title: String
     let subtitle: String
@@ -14,11 +14,21 @@ struct CleanupScreen: View {
     let preview: (@MainActor @escaping (CLIOutputLine) -> Void) async throws -> Int32
     let run: (@MainActor @escaping (CLIOutputLine) -> Void) async throws -> Int32
 
+    /// Custom copy for the confirmation alert. Defaults to a safe,
+    /// Trash-routing-aware message shared by all cleanup screens.
+    var confirmTitle: String? = nil
+    var confirmMessage: String? = nil
+    /// Label for the destructive action button in the confirm alert.
+    var actionLabel: String? = nil
+
     @EnvironmentObject private var loc: Localization
     @StateObject private var runner = CommandRunner()
     @State private var phase: Phase = .idle
     @State private var showConfirm = false
     @State private var showRawConsole = false
+    /// Snapshot of the preview summary captured when the run starts, so the
+    /// result banner can show "reclaimed X · Y items" after completion.
+    @State private var previewSnapshot: PreviewParser.Summary?
 
     private enum Phase: Equatable { case idle, previewing, previewed, running, done }
 
@@ -37,15 +47,21 @@ struct CleanupScreen: View {
                 stepGuide
                 categoriesCard
                 previewCard
+                if phase == .done {
+                    resultBanner
+                }
             }
         }
         .featurePadding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .alert(loc.t("运行\(title)？", "Run \(title.lowercased())?"), isPresented: $showConfirm) {
+        .alert(confirmTitle ?? loc.t("运行\(title)？", "Run \(title.lowercased())?"), isPresented: $showConfirm) {
             Button(loc.t("取消", "Cancel"), role: .cancel) {}
-            Button(loc.t("运行", "Run"), role: .destructive) { runNow() }
+            Button(actionLabel ?? loc.t("运行", "Run"), role: .destructive) { runNow() }
         } message: {
-            Text(loc.t("这将应用预览中显示的更改。某些步骤可能需要活动的 sudo 会话。", "This will apply the changes shown in the preview. Some steps may require an active sudo session."))
+            Text(confirmMessage ?? loc.t(
+                "这将把预览中识别的项目移至废纸篓，可从废纸篓恢复。系统级项目需要活动的 sudo 会话。",
+                "This will move the items shown in the preview to Trash, where they can be recovered. Some steps may require an active sudo session."
+            ))
         }
     }
 
@@ -107,6 +123,13 @@ struct CleanupScreen: View {
         HStack(spacing: 8) {
             if runner.isRunning {
                 Button(loc.t("停止", "Stop"), role: .destructive) { runner.cancel() }.buttonStyle(.bordered)
+            } else if phase == .done {
+                Button {
+                    resetToIdle()
+                } label: {
+                    Label(loc.t("再试一次", "Run Again"), systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(PrimaryButtonStyle())
             } else {
                 // Single primary action whose label/behaviour follows the flow:
                 // idle/previewing → "Preview", previewed → "Run".
@@ -139,7 +162,7 @@ struct CleanupScreen: View {
         case .idle, .previewing:
             return loc.t("预览", "Preview")
         case .previewed:
-            return loc.t("运行", "Run")
+            return actionLabel ?? loc.t("运行", "Run")
         case .running:
             return loc.t("运行中…", "Running…")
         case .done:
@@ -223,6 +246,61 @@ struct CleanupScreen: View {
         }
     }
 
+    // MARK: - Result banner (shown after run completes)
+
+    private var resultBanner: some View {
+        let succeeded = runner.exitCode == 0
+        return Card(padding: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    Image(systemName: succeeded ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(Theme.color(for: succeeded ? .good : .critical))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(succeeded
+                             ? loc.t("完成", "Finished")
+                             : loc.t("未完全成功", "Completed with errors"))
+                            .font(.system(size: 14, weight: .semibold))
+                        Text(resultSummaryText)
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                if succeeded {
+                    HStack(spacing: 8) {
+                        Button {
+                            openTrash()
+                        } label: {
+                            Label(loc.t("打开废纸篓", "Open Trash"), systemImage: "trash")
+                        }
+                        .buttonStyle(.bordered)
+                        Button {
+                            resetToIdle()
+                        } label: {
+                            Label(loc.t("再清理一次", "Run Again"), systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
+        }
+    }
+
+    private var resultSummaryText: String {
+        if let snap = previewSnapshot {
+            let space = snap.totalSpaceText ?? "—"
+            let items = snap.totalItems ?? snap.entries.filter { $0.kind == .wouldClean }.count
+            return loc.t("本次可回收约 \(space) · \(items) 项已移至废纸篓，可从废纸篓恢复。",
+                         "Approximately \(space) reclaimable · \(items) items moved to Trash, recoverable from Trash.")
+        }
+        return loc.t("操作已完成，已移至废纸篓，可从废纸篓恢复。",
+                     "Operation complete. Items moved to Trash, recoverable from Trash.")
+    }
+
+    private func openTrash() {
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: "~/.Trash").expandingTildeInPath])
+    }
+
     private var phaseLabel: String {
         switch phase {
         case .idle: return loc.t("预览结果", "Preview")
@@ -259,10 +337,22 @@ struct CleanupScreen: View {
     }
 
     private func runNow() {
+        // Capture the preview summary so the result banner can show
+        // "reclaimed X · Y items" after the run completes.
+        previewSnapshot = parsed
         phase = .running
         Task {
             await runner.run { onLine in try await run(onLine) }
             phase = .done
         }
+    }
+
+    private func resetToIdle() {
+        runner.cancel()
+        runner.lines.removeAll()
+        runner.exitCode = nil
+        runner.error = nil
+        previewSnapshot = nil
+        phase = .idle
     }
 }
