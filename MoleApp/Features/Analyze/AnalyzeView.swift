@@ -67,8 +67,9 @@ final class AnalyzeViewModel: ObservableObject {
             // Provide a user-friendly message for timeout errors
             let nsError = error as NSError
             if nsError.domain == NSPOSIXErrorDomain && nsError.code == Int(SIGTERM) {
-                self.error = loc.t("扫描超时，该目录可能过大。请尝试扫描更小的子目录。", 
+                self.error = loc?.t("扫描超时，该目录可能过大。请尝试扫描更小的子目录。", 
                                    "Scan timed out. The directory may be too large. Try scanning a smaller subdirectory.")
+                    ?? "Scan timed out. The directory may be too large."
             } else {
                 self.error = error.localizedDescription
             }
