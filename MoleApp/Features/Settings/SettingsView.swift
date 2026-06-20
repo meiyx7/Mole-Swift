@@ -83,9 +83,11 @@ struct SettingsView: View {
                 }
             }
             .onChange(of: updater.state) { newState in
-                // Auto-open download URL when a user-initiated check finds an update.
-                if userInitiatedCheck, case .available(_, let url, _) = newState {
-                    if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+                // When a user-initiated check finds an update, surface it
+                // in-card so the user can download & install in place.
+                // We no longer auto-open the browser; the in-app installer
+                // handles the whole flow.
+                if userInitiatedCheck, case .available = newState {
                     userInitiatedCheck = false
                 }
             }
@@ -257,7 +259,7 @@ struct SettingsView: View {
                 Label(loc.t("更新 Mole", "Update Mole"), systemImage: "arrow.up.circle")
                     .font(.system(size: 13, weight: .semibold))
 
-                // GUI App update check
+                // GUI App update check + in-app install
                 HStack(spacing: 8) {
                     Button {
                         userInitiatedCheck = true
@@ -275,11 +277,11 @@ struct SettingsView: View {
                         }
                     }
                     .buttonStyle(PrimaryButtonStyle())
-                    .disabled(isCheckingUpdate)
+                    .disabled(isCheckingUpdate || isInstalling)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(loc.t("应用更新", "App Update"))
                             .font(.system(size: 12, weight: .medium))
-                        Text(loc.t("检查 Mole 应用最新版本。", "Check for the latest Mole app version."))
+                        Text(loc.t("检查并安装 Mole 应用最新版本。", "Check for and install the latest Mole app version."))
                             .font(.system(size: 11)).foregroundColor(.secondary)
                     }
                     Spacer()
@@ -296,6 +298,12 @@ struct SettingsView: View {
                         Spacer()
                     }
                     .padding(.vertical, 4)
+                }
+
+                // In-app download + install controls, shown when an update
+                // is available or an install is in progress.
+                if case .available(let version, _, _) = updater.state {
+                    installControls(version: version)
                 }
 
                 Divider()
@@ -330,6 +338,102 @@ struct SettingsView: View {
         }
     }
 
+    /// Whether an install (download/replace) is currently in flight.
+    private var isInstalling: Bool {
+        switch updater.installState {
+        case .idle, .done, .error: return false
+        case .downloading, .extracting, .replacing: return true
+        }
+    }
+
+    /// Download / install / cancel controls shown when an update is available.
+    @ViewBuilder
+    private func installControls(version: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            switch updater.installState {
+            case .idle:
+                HStack(spacing: 8) {
+                    Button {
+                        Task { await updater.downloadAndInstall() }
+                    } label: {
+                        Label(loc.t("下载并安装 \(version)", "Download & Install \(version)"), systemImage: "arrow.down.circle.fill")
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    Button {
+                        if let url = URL(string: githubReleaseURL(for: version)) {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        Label(loc.t("在浏览器查看", "View in Browser"), systemImage: "safari")
+                    }
+                    .buttonStyle(.bordered)
+                }
+            case .downloading(let progress):
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Text(loc.t("正在下载 \(version)…", "Downloading \(version)…"))
+                            .font(.system(size: 12, weight: .medium))
+                        Spacer()
+                        Text("\(Int(progress * 100))%")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundColor(.secondary)
+                        Button {
+                            updater.cancelInstall()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help(loc.t("取消下载", "Cancel download"))
+                    }
+                    ProgressBar(value: progress * 100, tone: .good, height: 6)
+                }
+                .padding(.vertical, 4)
+            case .extracting:
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(loc.t("正在解压…", "Extracting…"))
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                }
+                .padding(.vertical, 4)
+            case .replacing:
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(loc.t("正在替换应用，可能需要输入密码…", "Replacing app, may require your password…"))
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                }
+                .padding(.vertical, 4)
+            case .done:
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                    Text(loc.t("安装完成，正在重启…", "Installed, relaunching…"))
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                }
+                .padding(.vertical, 4)
+            case .error(let msg):
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                    Text(loc.t("安装失败：\(msg)", "Install failed: \(msg)"))
+                        .font(.system(size: 11)).foregroundColor(.orange)
+                    Spacer()
+                    Button {
+                        Task { await updater.downloadAndInstall() }
+                    } label: {
+                        Label(loc.t("重试", "Retry"), systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
+    /// Builds the GitHub release page URL for a given version tag.
+    private func githubReleaseURL(for version: String) -> String {
+        "https://github.com/meiyx7/Mole-Swift/releases/tag/v\(version)"
+    }
+
     private var isCheckingUpdate: Bool {
         if case .checking = updater.state { return true }
         return false
@@ -353,7 +457,7 @@ struct SettingsView: View {
             )
         case .available(let v, _, _):
             return UpdateStatus(
-                text: loc.t("发现新版本 \(v)，已自动打开下载页面。", "Version \(v) found. Download page opened automatically."),
+                text: loc.t("发现新版本 \(v)，点击下方按钮下载并安装。", "Version \(v) available. Click the button below to download and install."),
                 icon: "arrow.up.circle.fill",
                 color: .blue
             )

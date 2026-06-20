@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import Charts
 
 @MainActor
@@ -7,14 +8,27 @@ final class StatusViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     @Published var isLive = false
+    /// User-selected refresh interval in seconds. Persisted across launches
+    /// via UserDefaults so the choice sticks. Defaults to 5s (the previous
+    /// hard-coded value) to preserve existing behaviour.
+    @Published var refreshInterval: TimeInterval = {
+        let stored = UserDefaults.standard.double(forKey: "statusRefreshInterval")
+        return stored > 0 ? stored : 5.0
+    }()
+
+    /// Available refresh interval choices exposed in the UI.
+    static let intervalChoices: [TimeInterval] = [3, 5, 10, 30]
 
     private var refreshTask: Task<Void, Never>?
-    private let interval: TimeInterval = 5.0
     private weak var liveService: MoleService?
     /// Guards against overlapping refreshes: if the previous snapshot
     /// request hasn't finished (e.g. CLI hung), skip the next tick instead
     /// of piling up concurrent `mo status` processes.
     private var isRefreshing = false
+    /// Whether the app window is currently visible (key window or at least
+    /// on screen). When false, the live refresh loop pauses to avoid
+    /// burning CPU on background `mo status` calls.
+    private var windowVisible = true
 
     func load(service: MoleService) async {
         isLoading = true
@@ -34,12 +48,44 @@ final class StatusViewModel: ObservableObject {
         startRefreshLoop()
     }
 
+    /// Updates the refresh interval and persists it. If live mode is on,
+    /// the loop restarts with the new interval.
+    func setRefreshInterval(_ interval: TimeInterval, service: MoleService) {
+        refreshInterval = interval
+        UserDefaults.standard.set(interval, forKey: "statusRefreshInterval")
+        if isLive {
+            startRefreshLoop()
+        }
+    }
+
+    /// Called by window visibility observers. When the window becomes
+    /// hidden, the live loop pauses; when it returns, the loop resumes
+    /// (and triggers an immediate refresh so stale data doesn't linger).
+    func setWindowVisible(_ visible: Bool, service: MoleService) {
+        windowVisible = visible
+        guard isLive else { return }
+        if visible {
+            // Resume: kick an immediate refresh and restart the loop.
+            Task { await load(service: service) }
+            startRefreshLoop()
+        } else {
+            // Pause: cancel the pending sleep but keep isLive true so
+            // resuming works. The loop's next iteration checks
+            // windowVisible and exits.
+            refreshTask?.cancel()
+            refreshTask = nil
+        }
+    }
+
     private func startRefreshLoop() {
         refreshTask?.cancel()
         refreshTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64((self?.interval ?? 5) * 1_000_000_000))
                 guard let self, !Task.isCancelled, self.isLive else { return }
+                // Pause when the window is not visible to save resources.
+                guard self.windowVisible else { return }
+                try? await Task.sleep(nanoseconds: UInt64(self.refreshInterval * 1_000_000_000))
+                guard let self, !Task.isCancelled, self.isLive, self.windowVisible else { return }
                 // Skip if a previous refresh is still in flight.
                 guard !self.isRefreshing else { continue }
                 guard let svc = self.liveService else { return }
@@ -93,7 +139,22 @@ struct StatusView: View {
                 )) {
                     Label(vm.isLive ? loc.t("实时", "Live") : loc.t("已暂停", "Paused"), systemImage: vm.isLive ? "pause.fill" : "play.fill")
                 }
-                .help(loc.t("切换实时刷新（每 5 秒）", "Toggle live refresh (every 5s)"))
+                .help(loc.t("切换实时刷新", "Toggle live refresh"))
+            }
+            // Refresh interval picker, only relevant when live mode is on.
+            if vm.isLive {
+                ToolbarItem(placement: .primaryAction) {
+                    Picker(loc.t("刷新间隔", "Refresh interval"), selection: Binding(
+                        get: { vm.refreshInterval },
+                        set: { vm.setRefreshInterval($0, service: service) }
+                    )) {
+                        ForEach(StatusViewModel.intervalChoices, id: \.self) { interval in
+                            Text("\(Int(interval))s").tag(interval)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .help(loc.t("选择实时刷新间隔", "Choose live refresh interval"))
+                }
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { Task { await vm.load(service: service) } } label: {
@@ -107,6 +168,21 @@ struct StatusView: View {
         .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
             Task { await vm.load(service: service) }
         }
+        // Pause live refresh when the window is hidden (minimised, behind
+        // other windows, or app in background) and resume when it returns.
+        // This avoids burning CPU on `mo status` calls nobody is looking at.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            vm.setWindowVisible(true, service: service)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+            vm.setWindowVisible(false, service: service)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
+            vm.setWindowVisible(false, service: service)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            vm.setWindowVisible(true, service: service)
+        }
     }
 
     @ViewBuilder
@@ -114,19 +190,18 @@ struct StatusView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header(snap)
-                HStack(alignment: .top, spacing: 14) {
-                    // Left column: CPU + Memory + Battery
-                    VStack(spacing: 14) {
-                        cpuCard(snap.cpu)
-                        memoryCard(snap.memory)
-                        batteryCard(snap.batteries ?? [])
+                // Responsive layout: use two columns when there's room,
+                // collapse to a single column on narrow windows so cards
+                // don't get squeezed. ViewThatFits picks the first layout
+                // that fits at the current width.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 14) {
+                        leftColumn(snap)
+                        rightColumn(snap)
                     }
-                    // Right column: Storage + Network + GPU + Bluetooth
-                    VStack(spacing: 14) {
-                        disksCard(snap.disks, trash: snap.trashSize, trashApprox: snap.trashApprox)
-                        networkCard(snap.network, history: snap.networkHistory, proxy: snap.proxy)
-                        gpuCard(snap.gpu)
-                        bluetoothCard(snap.bluetooth)
+                    VStack(alignment: .leading, spacing: 14) {
+                        leftColumn(snap)
+                        rightColumn(snap)
                     }
                 }
                 if shouldShowThermal(snap.thermal, snap) {
@@ -137,6 +212,27 @@ struct StatusView: View {
                     alerts(snap.processAlerts)
                 }
             }
+        }
+    }
+
+    /// Left column cards: CPU + Memory + Battery.
+    @ViewBuilder
+    private func leftColumn(_ snap: StatusSnapshot) -> some View {
+        VStack(spacing: 14) {
+            cpuCard(snap.cpu)
+            memoryCard(snap.memory)
+            batteryCard(snap.batteries ?? [])
+        }
+    }
+
+    /// Right column cards: Storage + Network + GPU + Bluetooth.
+    @ViewBuilder
+    private func rightColumn(_ snap: StatusSnapshot) -> some View {
+        VStack(spacing: 14) {
+            disksCard(snap.disks, trash: snap.trashSize, trashApprox: snap.trashApprox)
+            networkCard(snap.network, history: snap.networkHistory, proxy: snap.proxy)
+            gpuCard(snap.gpu)
+            bluetoothCard(snap.bluetooth)
         }
     }
 
