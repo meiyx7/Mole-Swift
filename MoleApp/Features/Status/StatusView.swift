@@ -134,22 +134,11 @@ struct StatusView: View {
         return LazyVGrid(columns: columns, spacing: 14) {
             cpuCard(snap.cpu)
             memoryCard(snap.memory)
-            // GPU card only shows when there's a discrete GPU with
-            // useful info. Integrated-only Macs hide it entirely.
-            if shouldShowGPU(snap.gpu) {
-                gpuCard(snap.gpu)
-            }
+            gpuCard(snap.gpu)
             if shouldShowThermal(snap.thermal, snap) {
                 thermalCard(snap.thermal, snap)
             }
         }
-    }
-
-    /// Returns true only when there's a discrete GPU worth showing.
-    private func shouldShowGPU(_ gpus: [GPUStatus]) -> Bool {
-        guard !gpus.isEmpty else { return false }
-        // Hide when the only GPU has no name and no usage data.
-        return gpus.contains { !$0.name.isEmpty && ($0.usage >= 0 || $0.memoryTotal > 0) }
     }
 
     /// Returns true only when at least one thermal/power metric is available.
@@ -256,11 +245,14 @@ struct StatusView: View {
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                     if gpus.isEmpty {
-                        Text(loc.t("无独立显卡", "No discrete GPU")).font(.system(size: 11)).foregroundColor(.secondary)
+                        Text(loc.t("集成显卡", "Integrated")).font(.system(size: 10, weight: .semibold))
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Color.gray.opacity(0.18), in: Capsule())
+                            .foregroundColor(.secondary)
                     }
                 }
                 if gpus.isEmpty {
-                    Text(loc.t("此 Mac 仅有集成显卡。", "Integrated graphics only on this Mac."))
+                    Text(loc.t("此 Mac 使用集成显卡，无独立 GPU 信息。", "This Mac uses integrated graphics. No discrete GPU info."))
                         .font(.system(size: 12)).foregroundColor(.secondary)
                 } else {
                     ForEach(gpus.indices, id: \.self) { i in
@@ -278,6 +270,9 @@ struct StatusView: View {
                                     Text(ByteFormatter.percent(g.usage)).font(.system(size: 11, design: .rounded))
                                         .frame(width: 44, alignment: .trailing)
                                 }
+                            } else if g.memoryTotal == 0 {
+                                Text(loc.t("使用率需管理员权限", "Usage requires admin"))
+                                    .font(.system(size: 10)).foregroundColor(.secondary)
                             }
                             if g.memoryTotal > 0 {
                                 Text(loc.t("\(ByteFormatter.bytes(g.memoryUsed)) / \(ByteFormatter.bytes(g.memoryTotal)) VRAM", "\(ByteFormatter.bytes(g.memoryUsed)) / \(ByteFormatter.bytes(g.memoryTotal)) VRAM"))

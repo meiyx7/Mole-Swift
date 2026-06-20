@@ -1,4 +1,5 @@
 import SwiftUI
+import LocalAuthentication
 
 struct SettingsView: View {
     @EnvironmentObject private var service: MoleService
@@ -6,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject private var updater: UpdateChecker
     @State private var version = ""
     @State private var touchidStatus = ""
+    @State private var touchidSupported = false
     @State private var completionScript = ""
     @State private var selectedShell = "zsh"
     @StateObject private var runner = CommandRunner()
@@ -55,6 +57,16 @@ struct SettingsView: View {
         )
     }
 
+    /// Checks whether this Mac has Touch ID hardware available.
+    private static func checkTouchIDSupport() -> Bool {
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+            return false
+        }
+        return context.biometryType == .touchID
+    }
+
     var body: some View {
         if !service.isInstalled {
             CLIUnavailableView()
@@ -62,13 +74,15 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header
+                    // High-frequency / interactive sections first.
                     languageCard
-                    aboutCard
-                    touchidCard
-                    completionCard
                     updateCard
+                    if touchidSupported { touchidCard }
+                    completionCard
                     removeCard
                     if runner.hasOutput || runner.isRunning || runner.exitCode != nil || runner.error != nil { consoleCard }
+                    // About section last (reference info, low interaction).
+                    aboutCard
                 }
             }
             .featurePadding()
@@ -85,6 +99,7 @@ struct SettingsView: View {
             .task {
                 version = await service.version()
                 touchidStatus = await service.touchidStatus()
+                touchidSupported = Self.checkTouchIDSupport()
             }
             .onReceive(NotificationCenter.default.publisher(for: .moleCheckUpdates)) { _ in
                 Task { await updater.checkForUpdates() }
