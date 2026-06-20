@@ -59,8 +59,8 @@ struct CleanupScreen: View {
             Button(actionLabel ?? loc.t("运行", "Run"), role: .destructive) { runNow() }
         } message: {
             Text(confirmMessage ?? loc.t(
-                "这将把预览中识别的项目移至废纸篓，可从废纸篓恢复。系统级项目需要活动的 sudo 会话。",
-                "This will move the items shown in the preview to Trash, where they can be recovered. Some steps may require an active sudo session."
+                "这将把扫描中识别的项目移至废纸篓，可从废纸篓恢复。系统级项目需要活动的 sudo 会话。",
+                "This will move the items shown in the scan to Trash, where they can be recovered. Some steps may require an active sudo session."
             ))
         }
         .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
@@ -84,10 +84,10 @@ struct CleanupScreen: View {
     // MARK: - Step guide
 
     /// A compact 3-step banner so the user always knows the flow:
-    /// 1. Preview  2. Review  3. Confirm & Run.
+    /// 1. Scan  2. Review  3. Confirm & Run.
     private var stepGuide: some View {
         HStack(spacing: 10) {
-            StepDot(n: 1, label: loc.t("预览", "Preview"), active: phase == .idle || phase == .previewing, done: phaseIsAfterPreview)
+            StepDot(n: 1, label: loc.t("扫描", "Scan"), active: phase == .idle || phase == .previewing, done: phaseIsAfterPreview)
             StepConnector(active: phaseIsAfterPreview)
             StepDot(n: 2, label: loc.t("查看", "Review"), active: phase == .previewed, done: phase == .running || phase == .done)
             StepConnector(active: phase == .running || phase == .done)
@@ -116,8 +116,8 @@ struct CleanupScreen: View {
                 .buttonStyle(PrimaryButtonStyle())
             } else {
                 // Single primary action whose label/behaviour follows the flow:
-                // idle/previewing → "Preview", previewed → "Run".
-                // The button is visibly disabled (flat gray) until the preview
+                // idle/previewing → "Scan", previewed → "Run".
+                // The button is visibly disabled (flat gray) until the scan
                 // step is done, so the gating is obvious without a second button.
                 Button {
                     if phase == .previewed {
@@ -136,8 +136,8 @@ struct CleanupScreen: View {
 
     private var canRunPrimary: Bool {
         if runner.isRunning { return false }
-        if phase == .idle || phase == .previewing { return true }   // can start preview
-        if phase == .previewed { return runner.hasOutput }          // can run after preview
+        if phase == .idle || phase == .previewing { return true }   // can start scan
+        if phase == .previewed { return runner.hasOutput }          // can run after scan
         if phase == .error { return true }                          // can retry from error
         return false                                                // running/done
     }
@@ -145,7 +145,7 @@ struct CleanupScreen: View {
     private var primaryActionLabel: String {
         switch phase {
         case .idle, .previewing:
-            return loc.t("预览", "Preview")
+            return loc.t("扫描", "Scan")
         case .previewed:
             return actionLabel ?? loc.t("运行", "Run")
         case .running:
@@ -153,7 +153,7 @@ struct CleanupScreen: View {
         case .done:
             return loc.t("已完成", "Done")
         case .error:
-            return loc.t("重试预览", "Retry preview")
+            return loc.t("重试扫描", "Retry scan")
         }
     }
 
@@ -295,12 +295,12 @@ struct CleanupScreen: View {
 
     private var phaseLabel: String {
         switch phase {
-        case .idle: return loc.t("预览结果", "Preview")
-        case .previewing: return loc.t("预览中（试运行）…", "Previewing (dry-run)…")
-        case .previewed: return loc.t("预览完成", "Preview ready")
+        case .idle: return loc.t("扫描结果", "Scan Results")
+        case .previewing: return loc.t("扫描中（试运行）…", "Scanning (dry-run)…")
+        case .previewed: return loc.t("扫描完成", "Scan complete")
         case .running: return loc.t("运行中…", "Running…")
         case .done: return loc.t("已完成", "Finished")
-        case .error: return loc.t("预览失败", "Preview failed")
+        case .error: return loc.t("扫描失败", "Scan failed")
         }
     }
 
@@ -326,7 +326,7 @@ struct CleanupScreen: View {
     private func runPreview() async {
         phase = .previewing
         await runner.run { onLine in try await preview(onLine) }
-        // If preview failed (error set or non-zero exit with no output),
+        // If scan failed (error set or non-zero exit with no output),
         // go to error phase so the user can retry instead of being stuck.
         if runner.error != nil || (runner.exitCode != nil && runner.exitCode != 0 && !runner.hasOutput) {
             phase = .error

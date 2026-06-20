@@ -20,7 +20,7 @@ struct OptimizeView: View {
                     (loc.t("清理崩溃日志", "Clean Crash Logs"), loc.t("移除崩溃与诊断报告", "Remove crash & diagnostic reports"), "ladybug"),
                     (loc.t("清理交换空间", "Purge Swap"), loc.t("刷新非活动内存和交换文件", "Flush inactive memory and swap files"), "arrow.triangle.2.circlepath")
                 ],
-                previewHint: loc.t("运行预览以查看 Mole 将执行哪些优化步骤 — 暂不会做任何更改。", "Run a preview to see which optimization steps Mole would perform — nothing is changed yet.")
+                previewHint: loc.t("运行扫描以查看 Mole 将执行哪些优化步骤 — 暂不会做任何更改。", "Run a scan to see which optimization steps Mole would perform — nothing is changed yet.")
             ) { onLine in
                 try await service.optimizePreview(onLine: onLine)
             } run: { onLine in

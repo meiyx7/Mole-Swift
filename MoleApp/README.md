@@ -8,9 +8,9 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 
 | 功能 / Feature | 说明 / Description |
 |---|---|
-| 系统状态 / Status | 实时展示 CPU、内存、GPU、温度、磁盘、网络、电池、蓝牙等系统指标，支持每 3 秒自动刷新 |
+| 系统状态 / Status | 实时展示 CPU、内存、GPU、温度、磁盘、网络、电池、蓝牙等系统指标，支持每 5 秒自动刷新 |
 | 磁盘分析 / Disk Explorer | 可视化磁盘占用，支持逐级进入子目录，面包屑导航可点击返回任意层级 |
-| 清理 / Clean | 深度清理系统缓存、应用残留，预览后确认执行 |
+| 清理 / Clean | 深度清理系统缓存、应用残留，扫描后确认执行 |
 | 优化 / Optimize | 刷新系统缓存与服务，维护 Mac 性能 |
 | 清理项目 / Purge Projects | 回收项目构建产物（node_modules、build 目录等） |
 | 安装包 / Installer Files | 查找并清理残留的安装包文件 |
@@ -36,6 +36,19 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 - App 启动时会自动后台检查新版本
 
 ## 版本记录 / Changelog
+
+### v1.4.2
+
+- 统一术语：清理/优化/清理项目页面的「预览」全部改为「扫描」，与安装包页面一致
+- 清理页面错误状态支持重试扫描，取消操作显示「已取消」而非失败
+- 命令输出超过 3000 行时自动截断旧内容，避免界面卡顿
+- 流式命令支持并发安全，取消不再影响其他正在运行的任务
+- 状态页刷新间隔从 3 秒调整为 5 秒，降低资源占用
+- 首次启动自动检测系统语言（中文/英文），无需手动切换
+- 卸载页面开启永久删除时增加二次确认，非永久模式提示可从废纸篓恢复
+- 调试日志移至 `~/Library/Logs/MoleApp/debug.log`，超过 5MB 自动轮转
+- 修复打开废纸篓按钮因路径展开方法错误而无效的问题
+- 修复切换侧边栏标签时页面状态被销毁的问题
 
 ### v1.4.1
 

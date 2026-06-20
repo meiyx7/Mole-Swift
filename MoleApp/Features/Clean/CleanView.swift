@@ -26,13 +26,13 @@ struct CleanView: View {
                     (loc.t("大文件与旧文件", "Large & Old Files"), loc.t("大文件与长期未用的数据", "Big files and long-unused data"), "tray.full"),
                     (loc.t("项目产物", "Project Artifacts"), loc.t("各项目的 node_modules、构建目录", "node_modules, build dirs across projects"), "folder.badge.gearshape")
                 ],
-                previewHint: loc.t("运行预览以查看 Mole 将精确删除的内容 — 安全且不会做任何更改。", "Run a preview to see exactly what Mole would remove — safely, with no changes made."),
+                previewHint: loc.t("运行扫描以查看 Mole 将精确删除的内容 — 安全且不会做任何更改。", "Run a scan to see exactly what Mole would remove — safely, with no changes made."),
                 preview: { onLine in try await service.cleanPreview(onLine: onLine) },
                 run: { onLine in try await service.clean(onLine: onLine) },
                 confirmTitle: loc.t("运行深度清理？", "Run deep cleanup?"),
                 confirmMessage: loc.t(
-                    "Mole 将把预览中识别的缓存和垃圾文件移至废纸篓，可从废纸篓恢复。系统级项目需要活动的 sudo 会话。",
-                    "Mole will move the caches and junk identified in the preview to Trash, where they can be recovered. System-level items require an active sudo session."
+                    "Mole 将把扫描中识别的缓存和垃圾文件移至废纸篓，可从废纸篓恢复。系统级项目需要活动的 sudo 会话。",
+                    "Mole will move the caches and junk identified in the scan to Trash, where they can be recovered. System-level items require an active sudo session."
                 ),
                 actionLabel: loc.t("清理", "Clean")
             )

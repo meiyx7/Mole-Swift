@@ -20,7 +20,7 @@ struct PurgeView: View {
                     ("Gradle / Maven", loc.t(".gradle、.m2 构建缓存", ".gradle, .m2 build caches"), "tray.full"),
                     (loc.t("Go 构建缓存", "Go Build Cache"), loc.t("Go 构建与模块缓存", "Go build & module caches"), "g.circle")
                 ],
-                previewHint: loc.t("运行预览以发现项目构建产物占用了多少空间。", "Run a preview to discover how much space your project build artifacts are wasting.")
+                previewHint: loc.t("运行扫描以发现项目构建产物占用了多少空间。", "Run a scan to discover how much space your project build artifacts are wasting.")
             ) { onLine in
                 try await service.purgePreview(onLine: onLine)
             } run: { onLine in
