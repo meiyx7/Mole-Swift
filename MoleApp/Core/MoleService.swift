@@ -47,16 +47,12 @@ final class MoleService: ObservableObject {
 
     /// Disk overview (Home, Applications, Library, insights).
     func analyzeOverview() async throws -> AnalyzeResult {
-        var options = CLIOptions()
-        options.timeout = 60 // 1 minute timeout for overview
-        return try await CLIBridge.runDecoding(["analyze", "--json"], as: AnalyzeResult.self, options: options)
+        try await CLIBridge.runDecoding(["analyze", "--json"], as: AnalyzeResult.self)
     }
 
     /// Directory-level analysis for a specific path.
     func analyze(path: String) async throws -> AnalyzeResult {
-        var options = CLIOptions()
-        options.timeout = 120 // 2 minutes timeout for directory analysis
-        return try await CLIBridge.runDecoding(["analyze", "--json", path], as: AnalyzeResult.self, options: options)
+        try await CLIBridge.runDecoding(["analyze", "--json", path], as: AnalyzeResult.self)
     }
 
     // MARK: - History (JSON)
