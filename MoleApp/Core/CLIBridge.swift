@@ -273,12 +273,27 @@ enum CLIBridge {
             process.standardInput = nonInteractiveStdin()
         }
 
+        // Read pipes concurrently to avoid deadlock when buffer fills up.
+        var stdoutData = Data()
+        var stderrData = Data()
+        let outSemaphore = DispatchSemaphore(value: 0)
+        let errSemaphore = DispatchSemaphore(value: 0)
+
+        outPipe.fileHandleForReading.readabilityHandler = { handle in
+            stdoutData.append(handle.availableData)
+        }
+        errPipe.fileHandleForReading.readabilityHandler = { handle in
+            stderrData.append(handle.availableData)
+        }
+
         do {
             try process.run()
         } catch {
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
             throw CLIBridgeError.executionFailed("\(error)")
         }
-        
+
         // Handle timeout if specified
         if let timeout = options.timeout {
             let timer = DispatchSource.makeTimerSource()
@@ -295,8 +310,15 @@ enum CLIBridge {
             process.waitUntilExit()
         }
 
-        let stdout = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        // Give readability handlers time to drain remaining data.
+        Thread.sleep(forTimeInterval: 0.05)
+        outPipe.fileHandleForReading.readabilityHandler = nil
+        errPipe.fileHandleForReading.readabilityHandler = nil
+        outSemaphore.signal()
+        errSemaphore.signal()
+
+        let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
+        let stderr = String(data: stderrData, encoding: .utf8) ?? ""
         return CLIResult(exitCode: process.terminationStatus, stdout: stdout, stderr: stderr)
     }
 

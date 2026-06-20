@@ -349,7 +349,7 @@ struct CleanupScreen: View {
     private func runPreview() async {
         phase = .previewing
         showCategories = false
-        await runner.run { onLine in try await preview(onLine) }
+        await runner.runAwaited { onLine in try await preview(onLine) }
         // If scan failed (error set or non-zero exit with no output),
         // go to error phase so the user can retry instead of being stuck.
         if runner.error != nil || (runner.exitCode != nil && runner.exitCode != 0 && !runner.hasOutput) {
@@ -365,7 +365,7 @@ struct CleanupScreen: View {
         previewSnapshot = parsed
         phase = .running
         Task {
-            await runner.run { onLine in try await run(onLine) }
+            await runner.runAwaited { onLine in try await run(onLine) }
             phase = .done
         }
     }

@@ -325,7 +325,7 @@ struct InstallerView: View {
     private func runNow() {
         phase = .running
         Task {
-            await runner.run { onLine in
+            await runner.runAwaited { onLine in
                 try await service.installer(onLine: onLine)
             }
             phase = .done
