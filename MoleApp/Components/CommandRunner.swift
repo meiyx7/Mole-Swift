@@ -62,12 +62,13 @@ final class CommandRunner: ObservableObject {
         isRunning = true
         do {
             let code = try await work { [weak self] line in
-                Task { @MainActor in
-                    guard let self else { return }
-                    self.lines.append(line)
-                    if self.lines.count > self.maxLines {
-                        self.lines.removeFirst(self.lines.count - self.maxLines)
-                    }
+                guard let self else { return }
+                // Synchronous append to avoid Task scheduling delays.
+                // @MainActor isolation ensures this runs on the main thread
+                // because runAwaited is @MainActor.
+                self.lines.append(line)
+                if self.lines.count > self.maxLines {
+                    self.lines.removeFirst(self.lines.count - self.maxLines)
                 }
             }
             self.exitCode = code
