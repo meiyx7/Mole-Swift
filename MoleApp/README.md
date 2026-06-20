@@ -16,7 +16,7 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 | 安装包 / Installer Files | 查找并清理残留的安装包文件 |
 | 卸载应用 / Uninstall Apps | 移除应用程序及其残留文件，支持按大小/日期/名称排序，移至废纸篓可恢复 |
 | 历史记录 / History | 查看清理活动记录 |
-| 设置 / Settings | 界面语言切换、应用更新检查、Touch ID for sudo、CLI 更新、卸载 |
+| 设置 / Settings | 界面语言切换、应用更新检查（自动下载）、Touch ID for sudo、CLI 更新 |
 
 ## 系统要求 / Requirements
 
@@ -36,6 +36,14 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 - App 启动时会自动后台检查新版本
 
 ## 版本记录 / Changelog
+
+### v1.4.0
+
+- 状态页健康评分移至标题左侧，修复圆环上方和右侧遮挡
+- 状态页卡片重排：左列 CPU/内存/电池，右列 存储/网络/GPU/蓝牙，消除空白区域
+- 磁盘分析修复进入 container 后无法继续深入、面包屑重复显示的问题
+- 设置页移除"移除 Mole"模块（危险操作）
+- 设置页检查更新发现新版本时自动打开下载页面
 
 ### v1.3.0
 

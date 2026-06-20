@@ -10,11 +10,9 @@ struct SettingsView: View {
     @State private var touchidSupported = false
     @StateObject private var runner = CommandRunner()
     @StateObject private var touchidRunner = CommandRunner()
-    @State private var showRemoveAlert = false
-    @State private var removePreview = ""
     @State private var helpText = ""
     @State private var showHelp = false
-    @State private var showUpdateAlert = false
+    @State private var userInitiatedCheck = false
 
     /// Minimum Mole CLI version this GUI app is compatible with.
     /// Bump when a new feature relies on CLI behavior not present in
@@ -74,7 +72,6 @@ struct SettingsView: View {
                     languageCard
                     updateCard
                     if touchidSupported { touchidCard }
-                    removeCard
                     if runner.hasOutput || runner.isRunning || runner.exitCode != nil || runner.error != nil { consoleCard }
                     // About section last (reference info, low interaction).
                     aboutCard
@@ -82,15 +79,6 @@ struct SettingsView: View {
             }
             .featurePadding()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .alert(loc.t("移除 Mole？", "Remove Mole?"), isPresented: $showRemoveAlert) {
-                Button(loc.t("取消", "Cancel"), role: .cancel) {}
-                Button(loc.t("移除", "Remove"), role: .destructive) { runRemove() }
-            } message: {
-                Text(loc.t(
-                    "这将从系统卸载 Mole CLI。卸载后应用将无法再运行命令。",
-                    "This uninstalls the Mole CLI from your system. The app will no longer be able to run commands."
-                ))
-            }
             .task {
                 version = await service.version()
                 touchidStatus = await service.touchidStatus()
@@ -99,13 +87,20 @@ struct SettingsView: View {
             .onReceive(NotificationCenter.default.publisher(for: .moleCheckUpdates)) { _ in
                 Task { await updater.checkForUpdates() }
             }
+            .onChange(of: updater.state) { newState in
+                // Auto-open download URL when a user-initiated check finds an update.
+                if userInitiatedCheck, case .available(_, let url, _) = newState {
+                    if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+                    userInitiatedCheck = false
+                }
+            }
         }
     }
 
     private var header: some View {
         FeatureHeader(
             title: loc.t("设置", "Settings"),
-            subtitle: loc.t("配置 Touch ID、更新与卸载。", "Configure Touch ID, updates and removal."),
+            subtitle: loc.t("配置 Touch ID 与更新。", "Configure Touch ID and updates."),
             systemImage: "gearshape"
         )
     }
@@ -270,6 +265,7 @@ struct SettingsView: View {
                 // GUI App update check
                 HStack(spacing: 8) {
                     Button {
+                        userInitiatedCheck = true
                         Task { await updater.checkForUpdates() }
                     } label: {
                         HStack(spacing: 4) {
@@ -303,16 +299,6 @@ struct SettingsView: View {
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                         Spacer()
-                        if case .available = updater.state {
-                            Button(loc.t("下载", "Download")) {
-                                if case .available(_, let url, _) = updater.state {
-                                    if let u = URL(string: url) { NSWorkspace.shared.open(u) }
-                                }
-                            }
-                            .font(.system(size: 11, weight: .medium))
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
                     }
                     .padding(.vertical, 4)
                 }
@@ -372,7 +358,7 @@ struct SettingsView: View {
             )
         case .available(let v, _, _):
             return UpdateStatus(
-                text: loc.t("发现新版本 \(v)，点击下载。", "Version \(v) is available. Click to download."),
+                text: loc.t("发现新版本 \(v)，已自动打开下载页面。", "Version \(v) found. Download page opened automatically."),
                 icon: "arrow.up.circle.fill",
                 color: .blue
             )
@@ -382,37 +368,6 @@ struct SettingsView: View {
                 icon: "exclamationmark.triangle.fill",
                 color: .orange
             )
-        }
-    }
-
-    private var removeCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                Label(loc.t("移除 Mole", "Remove Mole"), systemImage: "trash")
-                    .font(.system(size: 13, weight: .semibold))
-                Text(loc.t("从系统卸载 Mole CLI。", "Uninstall the Mole CLI from your system."))
-                    .font(.system(size: 11)).foregroundColor(.secondary)
-                HStack(spacing: 8) {
-                    Button {
-                        Task { removePreview = await service.removePreview() }
-                    } label: { Label(loc.t("预览", "Preview"), systemImage: "eye") }
-                        .buttonStyle(.bordered)
-                    Button { showRemoveAlert = true } label: {
-                        Label(loc.t("移除", "Remove"), systemImage: "trash")
-                    }
-                    .buttonStyle(PrimaryButtonStyle(tint: .red))
-                }
-                if !removePreview.isEmpty {
-                    ScrollView {
-                        Text(removePreview)
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxHeight: 140)
-                    .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-                }
-            }
         }
     }
 
@@ -445,15 +400,6 @@ struct SettingsView: View {
                     ConsoleOutputView(lines: runner.lines).frame(minHeight: 120, maxHeight: 240)
                 }
             }
-        }
-    }
-
-    private func runRemove() {
-        Task {
-            await runner.runAwaited { onLine in
-                try await service.remove(onLine: onLine)
-            }
-            service.refreshInstallation()
         }
     }
 }

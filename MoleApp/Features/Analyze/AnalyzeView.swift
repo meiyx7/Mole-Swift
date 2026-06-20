@@ -20,6 +20,11 @@ final class AnalyzeViewModel: ObservableObject {
     }
 
     func drill(into path: String, name: String) async {
+        // Prevent drilling while a scan is already running (avoids race
+        // conditions where rapid clicks pile up breadcrumb entries).
+        guard !isLoading else { return }
+        // Prevent drilling into the same path (avoids duplicate breadcrumb entries).
+        guard path != currentPath else { return }
         pathStack.append((name: name, path: path))
         await fetch(path: path)
     }
@@ -58,6 +63,13 @@ final class AnalyzeViewModel: ObservableObject {
             }
         } catch {
             self.error = error.localizedDescription
+            // Clear stale result so the error is visible instead of old content.
+            // Also roll back the breadcrumb so the user isn't trapped in a
+            // level that failed to load.
+            result = nil
+            if path != nil && !pathStack.isEmpty {
+                pathStack.removeLast()
+            }
         }
         isLoading = false
     }

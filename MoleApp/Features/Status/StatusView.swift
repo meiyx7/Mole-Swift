@@ -94,20 +94,23 @@ struct StatusView: View {
             VStack(alignment: .leading, spacing: 16) {
                 header(snap)
                 HStack(alignment: .top, spacing: 14) {
-                    // Left column: CPU + Memory
+                    // Left column: CPU + Memory + Battery
                     VStack(spacing: 14) {
                         cpuCard(snap.cpu)
                         memoryCard(snap.memory)
+                        batteryCard(snap.batteries ?? [])
                     }
-                    // Right column: GPU + Thermal (if available)
+                    // Right column: Storage + Network + GPU + Bluetooth
                     VStack(spacing: 14) {
+                        disksCard(snap.disks, trash: snap.trashSize, trashApprox: snap.trashApprox)
+                        networkCard(snap.network, history: snap.networkHistory, proxy: snap.proxy)
                         gpuCard(snap.gpu)
-                        if shouldShowThermal(snap.thermal, snap) {
-                            thermalCard(snap.thermal, snap)
-                        }
+                        bluetoothCard(snap.bluetooth)
                     }
                 }
-                disksAndNetwork(snap)
+                if shouldShowThermal(snap.thermal, snap) {
+                    thermalCard(snap.thermal, snap)
+                }
                 topProcesses(snap)
                 if !snap.processAlerts.isEmpty {
                     alerts(snap.processAlerts)
@@ -117,17 +120,24 @@ struct StatusView: View {
     }
 
     private func header(_ snap: StatusSnapshot) -> some View {
-        FeatureHeader(
-            title: loc.t("系统状态", "System Status"),
-            subtitle: loc.t("\(snap.hardware.model) · \(snap.hardware.osVersion) · 运行 \(snap.uptime)", "\(snap.hardware.model) · \(snap.hardware.osVersion) · up \(snap.uptime)"),
-            systemImage: "heart.text.square",
-            trailing: AnyView(healthBadge(snap))
-        )
-    }
-
-    private func healthBadge(_ snap: StatusSnapshot) -> some View {
         let tone = StatusTone.forHealthScore(snap.healthScore)
-        return VStack(alignment: .trailing, spacing: 2) {
+        return HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Theme.brand)
+                    .frame(width: 44, height: 44)
+                Image(systemName: "heart.text.square")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(loc.t("系统状态", "System Status"))
+                    .font(.system(size: 22, weight: .bold))
+                Text(loc.t("\(snap.hardware.model) · \(snap.hardware.osVersion) · 运行 \(snap.uptime)", "\(snap.hardware.model) · \(snap.hardware.osVersion) · up \(snap.uptime)"))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+            Spacer(minLength: 12)
             HStack(spacing: 8) {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(loc.t("健康评分", "Health Score"))
@@ -138,10 +148,12 @@ struct StatusView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(Theme.color(for: tone))
                 }
-                RingGauge(value: Double(snap.healthScore), label: loc.t("健康", "Health"), tone: tone, size: 52)
+                RingGauge(value: Double(snap.healthScore), label: loc.t("健康", "Health"), tone: tone, size: 44)
+                    .padding(4)
             }
+            .fixedSize()
         }
-        .fixedSize()
+        .padding(.bottom, 4)
     }
 
     /// Returns true only when at least one thermal/power metric is available.
@@ -336,21 +348,6 @@ struct StatusView: View {
             Text(title).font(.system(size: 10)).foregroundColor(.secondary).textCase(.uppercase)
             Text(value).font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundColor(Theme.color(for: tone))
-        }
-    }
-
-    private func disksAndNetwork(_ snap: StatusSnapshot) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            // Left: Storage + Battery
-            VStack(spacing: 14) {
-                disksCard(snap.disks, trash: snap.trashSize, trashApprox: snap.trashApprox)
-                batteryCard(snap.batteries ?? [])
-            }
-            // Right: Network + Bluetooth
-            VStack(spacing: 14) {
-                networkCard(snap.network, history: snap.networkHistory, proxy: snap.proxy)
-                bluetoothCard(snap.bluetooth)
-            }
         }
     }
 

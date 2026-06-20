@@ -162,16 +162,4 @@ final class MoleService: ObservableObject {
         if nightly { args.append("--nightly") }
         return try await CLIBridge.runStreaming(args, options: CLIOptions(), onLine: onLine)
     }
-
-    func removePreview() async -> String {
-        var options = CLIOptions()
-        options.dryRun = true
-        let result = try? await CLIBridge.run(["remove", "--dry-run"], options: options)
-        return result?.stdout ?? ""
-    }
-
-    @discardableResult
-    func remove(onLine: @escaping (CLIOutputLine) -> Void) async throws -> Int32 {
-        try await CLIBridge.runStreaming(["remove"], options: CLIOptions(), onLine: onLine)
-    }
 }
