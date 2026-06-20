@@ -143,21 +143,25 @@ struct AnalyzeView: View {
                 if !vm.isOverview {
                     breadcrumbBar
                 }
-                if vm.isLoading {
-                    ProgressView()
-                        .controlSize(.small)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
-                        .transition(.opacity)
-                }
                 summaryRow(result)
                 entriesSection(result)
                 if let largeFiles = result.largeFiles, !largeFiles.isEmpty {
                     largeFilesSection(largeFiles, total: result.totalSize)
                 }
             }
+            .overlay {
+                if vm.isLoading {
+                    ZStack {
+                        Color.black.opacity(0.05)
+                        ProgressView()
+                            .controlSize(.large)
+                    }
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                }
+            }
         }
-        .animation(.easeInOut(duration: 0.2), value: vm.isLoading)
+        .animation(.easeInOut(duration: 0.15), value: vm.isLoading)
     }
 
     /// Clickable breadcrumb navigation bar. Each segment navigates to

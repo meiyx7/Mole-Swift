@@ -34,7 +34,12 @@ struct CleanupScreen: View {
     private enum Phase: Equatable { case idle, previewing, previewed, running, done, error }
 
     private var parsed: PreviewParser.Summary {
-        PreviewParser.parse(runner.lines.map { $0.text })
+        let texts = runner.lines.map { $0.text }
+        DebugLog.append("CleanupScreen.parsed: runner.lines.count=\(runner.lines.count), texts.count=\(texts.count)")
+        if texts.count > 0 {
+            DebugLog.append("CleanupScreen.parsed: first 3 texts: \(texts.prefix(3).map { String($0.prefix(60)) })")
+        }
+        return PreviewParser.parse(texts)
     }
 
     private var hasVisualContent: Bool {

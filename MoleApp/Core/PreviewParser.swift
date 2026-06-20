@@ -54,6 +54,11 @@ struct PreviewParser {
         var totalItems: Int?
         var totalCategories: Int?
 
+        DebugLog.append("PreviewParser.parse: received \(lines.count) lines")
+        if lines.count > 0 {
+            DebugLog.append("PreviewParser.parse: first 5 lines: \(lines.prefix(5).map { String($0.prefix(80)) })")
+        }
+
         for raw in lines {
             let line = raw.trimmingCharacters(in: .whitespaces)
             if line.isEmpty { continue }
@@ -120,6 +125,7 @@ struct PreviewParser {
         if line.hasPrefix("✓ [DRY RUN]") {
             let body = line.replacingOccurrences(of: "✓ [DRY RUN]", with: "").trimmingCharacters(in: .whitespaces)
             let (label, size) = splitCommaSize(body)
+            DebugLog.append("PreviewParser: matched ✓ [DRY RUN], label=\(label), size=\(size ?? "nil")")
             return Entry(section: section.isEmpty ? "Purge" : section, label: label, sizeText: size, detail: nil, kind: .wouldClean)
         }
 
