@@ -413,6 +413,11 @@ enum CLIBridge {
         errQueue.async { readLines(from: errHandle, isError: true); errSemaphore.signal() }
 
         process.waitUntilExit()
+        
+        // Close write ends to signal EOF to readers
+        outPipe.fileHandleForWriting.closeFile()
+        errPipe.fileHandleForWriting.closeFile()
+        
         outSemaphore.wait()
         errSemaphore.wait()
         unregisterStreaming(taskID: taskID)
