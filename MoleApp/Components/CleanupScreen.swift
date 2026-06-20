@@ -298,7 +298,8 @@ struct CleanupScreen: View {
     }
 
     private func openTrash() {
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: "~/.Trash").expandingTildeInPath])
+        let trashPath = NSString(string: "~/.Trash").expandingTildeInPath
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: trashPath)])
     }
 
     private var phaseLabel: String {
