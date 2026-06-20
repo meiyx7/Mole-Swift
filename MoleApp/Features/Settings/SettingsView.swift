@@ -18,9 +18,41 @@ struct SettingsView: View {
 
     private let shells = ["bash", "zsh", "fish"]
 
+    /// Minimum Mole CLI version this GUI app is compatible with.
+    /// Bump when a new feature relies on CLI behavior not present in
+    /// older releases. The current value reflects the CLI version the
+    /// app was developed and tested against.
+    private let minCLIVersion = "1.43.1"
+
     /// GUI version read from the main Bundle (not hardcoded).
     private var guiVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+    }
+
+    /// Whether the installed CLI version meets the minimum requirement.
+    private var cliCompatible: Bool {
+        versionMeets(version, min: minCLIVersion)
+    }
+
+    /// Returns true when `v` >= `min` (semantic version compare).
+    private func versionMeets(_ v: String, min: String) -> Bool {
+        let vp = parseSemVer(v)
+        let mp = parseSemVer(min)
+        if vp.major != mp.major { return vp.major > mp.major }
+        if vp.minor != mp.minor { return vp.minor > mp.minor }
+        return vp.patch >= mp.patch
+    }
+
+    private func parseSemVer(_ s: String) -> (major: Int, minor: Int, patch: Int) {
+        // Strip leading "v" and any suffix like "-nightly".
+        let cleaned = s.hasPrefix("v") ? String(s.dropFirst()) : s
+        let base = cleaned.split(separator: "-").first.map(String.init) ?? cleaned
+        let parts = base.split(separator: ".").map { Int($0) ?? 0 }
+        return (
+            parts.count > 0 ? parts[0] : 0,
+            parts.count > 1 ? parts[1] : 0,
+            parts.count > 2 ? parts[2] : 0
+        )
     }
 
     var body: some View {
@@ -103,6 +135,26 @@ struct SettingsView: View {
                     Spacer()
                     Text(version.isEmpty ? "—" : version)
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                }
+                HStack {
+                    Label(loc.t("适配 CLI", "Requires CLI"), systemImage: "checkmark.shield").foregroundColor(.secondary)
+                    Spacer()
+                    Text("≥ \(minCLIVersion)")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundColor(cliCompatible ? .green : .orange)
+                }
+                if !version.isEmpty && !cliCompatible {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                            .font(.system(size: 10))
+                        Text(loc.t(
+                            "当前 CLI 版本过低，部分功能可能不可用。请在下方更新 CLI。",
+                            "CLI version is too old. Some features may be unavailable. Update the CLI below."
+                        ))
+                            .font(.system(size: 10))
+                            .foregroundColor(.orange)
+                    }
                 }
                 HStack {
                     Label(loc.t("可执行文件", "Binary"), systemImage: "terminal").foregroundColor(.secondary)
