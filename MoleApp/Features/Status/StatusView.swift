@@ -85,7 +85,7 @@ final class StatusViewModel: ObservableObject {
                 // Pause when the window is not visible to save resources.
                 guard self.windowVisible else { return }
                 try? await Task.sleep(nanoseconds: UInt64(self.refreshInterval * 1_000_000_000))
-                guard let self, !Task.isCancelled, self.isLive, self.windowVisible else { return }
+                guard !Task.isCancelled, self.isLive, self.windowVisible else { return }
                 // Skip if a previous refresh is still in flight.
                 guard !self.isRefreshing else { continue }
                 guard let svc = self.liveService else { return }

@@ -82,7 +82,7 @@ final class UpdateChecker: ObservableObject {
     /// that found an available update. Throws via `installState.error` on
     /// failure rather than Swift `throws` so the UI can render the message.
     func downloadAndInstall() async {
-        guard case .available(let version, _, _) = state else {
+        guard case .available = state else {
             installState = .error("No update available. Check for updates first.")
             return
         }
