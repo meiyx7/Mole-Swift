@@ -127,7 +127,7 @@ final class MoleService: ObservableObject {
     /// Uninstalls apps by name, streaming progress.
     @discardableResult
     func uninstall(apps: [String], permanent: Bool, onLine: @escaping (CLIOutputLine) -> Void) async throws -> Int32 {
-        var args = ["uninstall", "--non-interactive"]
+        var args = ["uninstall"]
         if permanent { args.append("--permanent") }
         args.append(contentsOf: apps)
         var options = CLIOptions()

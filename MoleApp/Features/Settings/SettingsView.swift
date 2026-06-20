@@ -36,7 +36,7 @@ struct SettingsView: View {
                     completionCard
                     updateCard
                     removeCard
-                    if runner.hasOutput || runner.isRunning { consoleCard }
+                    if runner.hasOutput || runner.isRunning || runner.exitCode != nil || runner.error != nil { consoleCard }
                 }
             }
             .featurePadding()
@@ -303,7 +303,7 @@ struct SettingsView: View {
                 HStack(spacing: 8) {
                     Button {
                         Task {
-                            await runner.run { onLine in
+                            await runner.runAwaited { onLine in
                                 try await service.update(force: false, nightly: false, onLine: onLine)
                             }
                             version = await service.version()
@@ -313,7 +313,7 @@ struct SettingsView: View {
                         .disabled(runner.isRunning)
                     Button {
                         Task {
-                            await runner.run { onLine in
+                            await runner.runAwaited { onLine in
                                 try await service.update(force: true, nightly: false, onLine: onLine)
                             }
                             version = await service.version()
@@ -406,14 +406,28 @@ struct SettingsView: View {
                             .foregroundColor(code == 0 ? .green : .red)
                     }
                 }
-                ConsoleOutputView(lines: runner.lines).frame(minHeight: 120, maxHeight: 240)
+                if runner.lines.isEmpty && !runner.isRunning {
+                    if let err = runner.error {
+                        Text(err)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Text(loc.t("命令已完成，无输出。", "Command completed with no output."))
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                } else {
+                    ConsoleOutputView(lines: runner.lines).frame(minHeight: 120, maxHeight: 240)
+                }
             }
         }
     }
 
     private func runRemove() {
         Task {
-            await runner.run { onLine in
+            await runner.runAwaited { onLine in
                 try await service.remove(onLine: onLine)
             }
             service.refreshInstallation()

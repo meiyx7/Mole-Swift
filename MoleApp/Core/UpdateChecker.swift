@@ -84,11 +84,36 @@ final class UpdateChecker: ObservableObject {
         var req = URLRequest(url: url)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.setValue("MoleApp/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+        req.timeoutInterval = 15
         let (data, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+        guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
-        return try JSONDecoder().decode(GitHubRelease.self, from: data)
+        switch http.statusCode {
+        case 200:
+            return try JSONDecoder().decode(GitHubRelease.self, from: data)
+        case 404:
+            // No releases published yet.
+            return GitHubRelease(
+                tagName: "0.0.0",
+                htmlURL: "https://github.com/\(repo)/releases",
+                body: "",
+                assets: []
+            )
+        case 403:
+            // Rate limited or forbidden.
+            throw NSError(
+                domain: "UpdateChecker",
+                code: 403,
+                userInfo: [NSLocalizedDescriptionKey: "GitHub API rate limit reached. Try again later."]
+            )
+        default:
+            throw NSError(
+                domain: "UpdateChecker",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: "Server returned HTTP \(http.statusCode)"]
+            )
+        }
     }
 
     // MARK: - Version comparison
