@@ -353,11 +353,40 @@ final class UpdateChecker: ObservableObject {
             return
         }
 
-        // Privileged replacement via ditto + rm, wrapped in osascript.
+        // Privileged replacement via ditto, wrapped in osascript.
         // We delete the old bundle first (ditto can't merge into an
         // existing .app cleanly), then ditto the new one into place.
-        let rmScript = "rm -rf '\(target.path)'"
-        let dittoScript = "ditto '\(newApp.path)' '\(target.path)'"
+        //
+        // Safety: validate the target path before constructing the shell
+        // command. The target must be a .app bundle under a known
+        // applications directory. This prevents a malformed/empty path
+        // from turning `rm -rf '<path>'` into something dangerous.
+        guard isValidAppBundlePath(target) else {
+            throw NSError(
+                domain: "UpdateChecker",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Refusing to replace bundle at unexpected path: \(target.path)"]
+            )
+        }
+
+        // Test guard: when MOLE_TEST_NO_AUTH=1 is set, never invoke
+        // osascript with administrator privileges. This mirrors the
+        // CLI's MOLE_TEST_NO_AUTH / MOLE_TEST_MODE contract so tests
+        // and CI never trigger an auth prompt.
+        if ProcessInfo.processInfo.environment["MOLE_TEST_NO_AUTH"] == "1" {
+            throw NSError(
+                domain: "UpdateChecker",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "Privileged install skipped (MOLE_TEST_NO_AUTH=1)."]
+            )
+        }
+
+        // Build the shell command with single-quote escaping. A single
+        // quote inside a single-quoted string is escaped as '\'' (close
+        // quote, escaped literal quote, reopen quote). This handles app
+        // names like "Mole's App.app" without breaking the command.
+        let rmScript = "rm -rf \(shellQuote(target.path))"
+        let dittoScript = "ditto \(shellQuote(newApp.path)) \(shellQuote(target.path))"
         let combined = "\(rmScript) && \(dittoScript)"
         // Escape double quotes for the AppleScript string literal.
         let escaped = combined.replacingOccurrences(of: "\\", with: "\\\\")
@@ -390,8 +419,47 @@ final class UpdateChecker: ObservableObject {
         }
     }
 
-    /// Launches the updated bundle at `url` and terminates this process.
-    /// Uses `open` so the new instance gets a fresh launch context.
+    /// Returns true if `url` is a `.app` bundle located under a known
+    /// applications directory. Used to guard the privileged `rm -rf` so
+    /// a malformed or empty bundle path can never produce a dangerous
+    /// deletion command.
+    private func isValidAppBundlePath(_ url: URL) -> Bool {
+        // Must end in .app.
+        guard url.pathExtension == "app" else { return false }
+        let path = url.path
+        let home = NSHomeDirectory()
+        // Allowed parent directories for app bundles.
+        let allowedPrefixes = [
+            "/Applications/",
+            "/Applications",
+            "\(home)/Applications/",
+            "\(home)/Applications",
+            "/Users/Shared/",
+            "/System/Applications/",  // read-only on modern macOS, but valid
+        ]
+        for prefix in allowedPrefixes {
+            if path == prefix || path.hasPrefix(prefix) {
+                // The path itself should be the .app, not a deeper child.
+                // i.e. parent must be one of the allowed dirs.
+                let parent = url.deletingLastPathComponent().path
+                if parent == "/Applications" || parent == "\(home)/Applications"
+                    || parent == "/Users/Shared" || parent == "/System/Applications" {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /// Single-quote-escapes a path for safe inclusion in a shell command.
+    /// Wraps the value in single quotes and escapes any embedded single
+    /// quote as `'\''` (close, escaped literal, reopen). This is the
+    /// standard POSIX-safe quoting and handles paths like
+    /// `/Applications/Mole's App.app`.
+    private func shellQuote(_ s: String) -> String {
+        return "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
     /// Relaunches the app at `url` after this process exits. We write a
     /// small shell helper to a temp file and run it detached: the helper
     /// waits for the current PID to disappear, then `open`s the app, then

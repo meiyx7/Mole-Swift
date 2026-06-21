@@ -37,6 +37,20 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 
 ## 版本记录 / Changelog
 
+### v1.5.10
+
+- 安装包扫描全面对齐 CLI（bin/installer.sh）
+- 扫描路径从 9 个对齐到 CLI 的 12 个（补齐 Mail Downloads、Telegram Desktop x2）
+- ZIP 文件过滤对齐 CLI 的 is_installer_zip()：只列出内含 .app/.pkg/.dmg/.xip 的 zip，不再列出所有 zip（修复预览与实际删除不一致）
+- 隐藏文件处理对齐 CLI：不再跳过隐藏文件（CLI 用 fd --hidden / find 不跳过）
+- source 标签补齐 Mail、Telegram，对齐 CLI 的 get_source_display()
+- Homebrew 缓存文件名剥离 sha256 哈希前缀，对齐 CLI 显示
+- 支持 MOLE_INSTALLER_SCAN_MAX_DEPTH 环境变量配置扫描深度
+- 应用内更新安全加固
+- rm -rf 前增加 .app bundle 路径校验：必须是 /Applications、~/Applications、/Users/Shared 等已知目录下的 .app，防止异常路径产生危险删除
+- osascript 提权增加 MOLE_TEST_NO_AUTH 测试守卫，对齐 CLI 安全规则，CI/测试不触发授权弹窗
+- shell 命令路径转义改用标准单引号转义（'\''），支持含单引号的 app 名（如 Mole's App.app）
+
 ### v1.5.9
 
 - 清理项目模块全面对齐 CLI 安全策略与扫描范围
