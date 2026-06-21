@@ -121,6 +121,17 @@ golangci-lint cache clean
 golangci-lint run ./cmd/...
 ```
 
+## MoleApp (Mac GUI)
+
+- The Mac app lives in `MoleApp/`. Build triggers on push to `main` and on `v*` tags via `build-mac-app.yml`.
+- `MARKETING_VERSION` in `MoleApp/project.yml` is the Mac app version (e.g. `1.6.8`).
+- **每次有明显的功能改动、Bug 修复或 UI 变更时，必须：**
+  1. 递增 `MARKETING_VERSION`（patch 版本 +1）
+  2. 提交代码并推送到 `main`
+  3. 打 `v<version>` tag 并推送（触发 GitHub Actions 构建）
+- 版本号格式：`主版本.次版本.补丁`，当前从 `1.6.x` 起步。
+- 文档或注释修改不需要升版本号。
+
 ## GitHub Operations
 
 - Re-read the live issue or PR title, body, comments, state, labels, and author language before any public reply or closeout.
