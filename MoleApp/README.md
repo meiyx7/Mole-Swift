@@ -12,7 +12,7 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 | 磁盘分析 / Disk Explorer | 可视化磁盘占用，支持逐级进入子目录，面包屑导航可点击返回任意层级 |
 | 清理 / Clean | 深度清理系统缓存、应用残留，扫描后确认执行 |
 | 优化 / Optimize | 刷新系统缓存与服务，维护 Mac 性能 |
-| 清理项目 / Purge Projects | 回收项目构建产物（node_modules、build 目录等），支持本地扫描和 CLI 交互两种模式 |
+| 清理项目 / Purge Projects | 回收项目构建产物（node_modules、build 目录等），由 Mole 执行删除 |
 | 安装包 / Installer Files | 查找并清理残留的安装包文件 |
 | 卸载应用 / Uninstall Apps | 移除应用程序及其残留文件，支持按大小/日期/名称排序，移至废纸篓可恢复 |
 | 历史记录 / History | 查看清理活动记录 |
@@ -36,6 +36,14 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 - App 启动时会自动后台检查新版本
 
 ## 版本记录 / Changelog
+
+### v1.6.3
+
+- 隐藏「清理项目（本地扫描）」菜单项，只保留统一后的「清理项目」
+- 「清理项目」布局对齐清理/安装包模块：新增功能说明卡片，移除 CLI 强调文案
+- 扫描入口内嵌在扫描结果卡片中：结果为空时提示开始扫描，扫描完成后在结果区显示清理按钮
+- 修复扫描/查看/执行进度条显示不正确的问题（扫描灰、查看执行绿），逻辑对齐 CleanupScreen
+- 过滤 `mo clean` 非交互模式下的 "System-level cleanup skipped, requires sudo" 等提示信息，避免在 GUI 中误显示为错误
 
 ### v1.6.2
 

@@ -229,6 +229,25 @@ enum CLIBridge {
         [subcommand] + rest
     }
 
+    /// Returns true if a cleaned output line should be suppressed from the
+    /// GUI display. These are informational banners from `mo clean`'s
+    /// non-interactive sudo setup that look like errors but aren't —
+    /// user-level cleanup still proceeds regardless.
+    static func shouldSuppress(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return false }
+        // Non-interactive mode banner from bin/clean.sh
+        if trimmed == "Running in non-interactive mode" { return true }
+        // Sudo session status lines (ICON_LIST prefix already stripped by ANSI)
+        if trimmed.contains("System-level cleanup skipped, requires sudo") { return true }
+        if trimmed.contains("User-level cleanup will proceed automatically") { return true }
+        if trimmed.contains("System-level cleanup enabled, sudo session active") { return true }
+        if trimmed.contains("System caches need sudo") { return true }
+        if trimmed.contains("Admin access available, system preview included") { return true }
+        if trimmed.contains("Admin access already available") { return true }
+        return false
+    }
+
     // MARK: - Private process plumbing
 
     /// Tracks active streaming processes by task ID so concurrent streams
@@ -380,6 +399,11 @@ enum CLIBridge {
                         // Strip ANSI colour/cursor escapes so the GUI shows
                         // clean text and PreviewParser can match prefixes.
                         let cleaned = ANSIStripper.strip(text)
+                        // Suppress informational non-interactive mode banners
+                        // from `mo clean` that look like errors in the GUI.
+                        // User-level cleanup still proceeds; these lines just
+                        // explain why system-level cleanup was skipped.
+                        if Self.shouldSuppress(cleaned) { continue }
                         let line = CLIOutputLine(text: cleaned, isError: isError, date: Date())
                         lock.lock(); onLine(line); lock.unlock()
                     }
@@ -387,8 +411,10 @@ enum CLIBridge {
             }
             if !buffer.isEmpty, let text = String(data: buffer, encoding: .utf8) {
                 let cleaned = ANSIStripper.strip(text)
-                let line = CLIOutputLine(text: cleaned, isError: isError, date: Date())
-                lock.lock(); onLine(line); lock.unlock()
+                if !Self.shouldSuppress(cleaned) {
+                    let line = CLIOutputLine(text: cleaned, isError: isError, date: Date())
+                    lock.lock(); onLine(line); lock.unlock()
+                }
             }
         }
 

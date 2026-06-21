@@ -23,7 +23,7 @@ struct RootView: View {
         case .clean:     CleanView()
         case .uninstall: UninstallView()
         case .optimize:  OptimizeView()
-        case .purge:     PurgeView()
+        case .purge:     PurgeInteractiveView()
         case .purgeInteractive: PurgeInteractiveView()
         case .installer: InstallerView()
         case .history:   HistoryView()

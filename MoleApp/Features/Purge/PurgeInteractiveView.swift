@@ -141,17 +141,21 @@ final class PurgeInteractiveRunner: ObservableObject {
 
 // MARK: - View
 
-/// 交互式清理项目视图：用 PTY 驱动 `mo purge` 的选择 TUI，把 TUI checklist
-/// 翻译成原生 UI，用户勾选后回放按键给 Mole，由 Mole 自己执行删除。
+/// 清理项目视图：扫描项目构建产物，勾选后由 Mole 执行删除（路由到废纸篓）。
 ///
-/// 与 PurgeView（原生扫描）并存，供用户对比两种实现方式。
+/// 布局与 CleanView/InstallerView 保持一致：
+/// header → stepGuide → categoriesCard（功能说明）→ previewCard（扫描结果）。
+/// 扫描入口内嵌在扫描结果卡片中，结果为空时提示开始扫描。
 struct PurgeInteractiveView: View {
     @EnvironmentObject private var service: MoleService
     @EnvironmentObject private var loc: Localization
     @StateObject private var runner = PurgeInteractiveRunner()
     @State private var selected: Set<Int> = []
-    @State private var scanRequested = false
+    @State private var phase: Phase = .idle
     @State private var showConfirm = false
+    @State private var showCategories = true
+
+    private enum Phase: Equatable { case idle, scanning, scanned, running, done, error }
 
     var body: some View {
         if !service.isInstalled {
@@ -161,8 +165,8 @@ struct PurgeInteractiveView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     header
                     stepGuide
-                    infoCard
-                    content
+                    categoriesCard
+                    previewCard
                 }
             }
             .featurePadding()
@@ -171,10 +175,13 @@ struct PurgeInteractiveView: View {
                    isPresented: $showConfirm) {
                 Button(loc.t("取消", "Cancel"), role: .cancel) {}
                 Button(loc.t("清理", "Purge"), role: .destructive) {
-                    runner.confirm(selected)
+                    runNow()
                 }
             } message: {
                 Text(confirmMessage)
+            }
+            .onChange(of: runner.phase) { _ in
+                syncPhaseFromRunner(runner.phase)
             }
             .onDisappear { runner.cancel() }
         }
@@ -184,9 +191,9 @@ struct PurgeInteractiveView: View {
 
     private var header: some View {
         FeatureHeader(
-            title: loc.t("清理项目（CLI 交互）", "Purge Projects (CLI Interactive)"),
-            subtitle: loc.t("通过 Mole CLI 的交互式选择菜单清理构建产物，由 Mole 执行删除。",
-                            "Purge build artifacts via Mole CLI's interactive selection menu. Mole performs the deletion."),
+            title: loc.t("清理项目", "Purge Projects"),
+            subtitle: loc.t("扫描并清理项目构建产物（node_modules、build 目录等），由 Mole 执行删除。",
+                            "Scan and clean project build artifacts (node_modules, build dirs, etc.). Mole performs the deletion."),
             systemImage: "shippingbox.fill",
             trailing: AnyView(actionButtons)
         )
@@ -194,236 +201,295 @@ struct PurgeInteractiveView: View {
 
     private var actionButtons: some View {
         HStack(spacing: 8) {
-            if scanRequested {
-                switch runner.phase {
-                case .scanning, .choosing, .applying:
-                    Button(loc.t("停止", "Stop"), role: .destructive) {
-                        runner.cancel()
-                        scanRequested = false
-                    }
-                    .buttonStyle(.bordered)
-                case .done, .failed:
-                    Button {
+            if isRunning {
+                Button(loc.t("停止", "Stop"), role: .destructive) {
+                    runner.cancel()
+                    if phase == .scanning || phase == .running {
+                        phase = .idle
                         selected.removeAll()
-                        scanRequested = false
-                    } label: {
-                        Label(loc.t("返回", "Back"), systemImage: "chevron.left")
                     }
-                    .buttonStyle(.bordered)
                 }
-            } else {
+                .buttonStyle(.bordered)
+            } else if phase == .done {
                 Button {
-                    startScan()
+                    resetToIdle()
                 } label: {
-                    Label(loc.t("开始扫描", "Start Scan"), systemImage: "magnifyingglass")
+                    Label(loc.t("再清理一次", "Run Again"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(PrimaryButtonStyle())
             }
         }
     }
 
+    private var isRunning: Bool {
+        phase == .scanning || phase == .running
+    }
+
     // MARK: - Step guide
 
+    /// 3 步进度条：扫描 → 查看 → 执行。
+    /// 逻辑与 CleanupScreen/InstallerView 保持一致，仅依赖 `phase`。
     private var stepGuide: some View {
         HStack(spacing: 10) {
             StepDot(n: 1, label: loc.t("扫描", "Scan"),
-                    active: runner.phase == .scanning,
-                    done: scanRequested && runner.phase != .scanning)
-            StepConnector(active: scanRequested && runner.phase != .scanning)
-            StepDot(n: 2, label: loc.t("选择", "Select"),
-                    active: runner.phase == .choosing,
-                    done: runner.phase == .applying || runner.phase == .done(0))
-            StepConnector(active: runner.phase == .applying || runner.phase == .done(0))
-            StepDot(n: 3, label: loc.t("清理", "Purge"),
-                    active: runner.phase == .applying,
-                    done: runner.phase == .done(0))
+                    active: phase == .idle || phase == .scanning,
+                    done: phaseIsAfterScan)
+            StepConnector(active: phaseIsAfterScan)
+            StepDot(n: 2, label: loc.t("查看", "Review"),
+                    active: phase == .scanned,
+                    done: phase == .running || phase == .done || phase == .error)
+            StepConnector(active: phase == .running || phase == .done || phase == .error)
+            StepDot(n: 3, label: loc.t("执行", "Run"),
+                    active: phase == .running,
+                    done: phase == .done)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
     }
 
-    // MARK: - Info card
+    private var phaseIsAfterScan: Bool {
+        phase == .scanned || phase == .running || phase == .done || phase == .error
+    }
 
-    private var infoCard: some View {
+    // MARK: - Categories card (功能说明)
+
+    private var categoriesCard: some View {
         Card {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(loc.t("工作原理", "How it works"))
-                    .font(.system(size: 13, weight: .semibold))
-                Text(loc.t(
-                    "此模式在伪终端中运行 `mo purge`，解析 Mole 的交互式选择菜单为原生列表。你勾选后，App 把选择回放为按键发给 Mole，由 Mole 自己执行删除。发送前会三重校验屏幕选择与你的意图一致，任何不符都会中止且不删除任何内容。",
-                    "This mode runs `mo purge` in a pseudo-terminal, parsing Mole's interactive selection menu into a native list. After you select, the app replays your choices as keystrokes to Mole, which performs the deletion itself. Three-way verification before sending ensures the on-screen selection matches your intent; any mismatch aborts with nothing removed."
-                ))
-                .font(.system(size: 11))
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(loc.t("功能说明", "What this does"))
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    Button {
+                        showCategories.toggle()
+                    } label: {
+                        Image(systemName: "questionmark.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(Theme.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .help(loc.t("点击显示/隐藏功能说明", "Click to show/hide description"))
+                }
+                if showCategories {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
+                              spacing: 10) {
+                        categoryRow(loc.t("node_modules", "node_modules"),
+                                    loc.t("npm/yarn 项目依赖目录", "npm/yarn project dependencies"), "shippingbox")
+                        categoryRow(loc.t("构建产物", "Build Outputs"),
+                                    loc.t("target、build、dist、out 等编译输出", "target, build, dist, out dirs"), "hammer")
+                        categoryRow(loc.t("依赖缓存", "Dependency Caches"),
+                                    loc.t(".cargo、.gradle、.m2 等包管理器缓存", ".cargo, .gradle, .m2 caches"), "internaldrive")
+                        categoryRow(loc.t("Xcode 产物", "Xcode Artifacts"),
+                                    loc.t("DerivedData、build 文件夹", "DerivedData, build folders"), "cube")
+                        categoryRow(loc.t("临时文件", "Temp Files"),
+                                    loc.t(".tmp、.cache 等临时目录", ".tmp, .cache temp dirs"), "clock")
+                        categoryRow(loc.t("安全删除", "Safe Deletion"),
+                                    loc.t("删除路由到废纸篓，可恢复", "Deleted to Trash, recoverable"), "trash")
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showCategories)
+    }
+
+    private func categoryRow(_ name: String, _ detail: String, _ icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon).foregroundColor(Theme.accent).frame(width: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name).font(.system(size: 12, weight: .medium))
+                Text(detail).font(.system(size: 10)).foregroundColor(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - Preview card (扫描结果)
+
+    private var previewCard: some View {
+        Card(padding: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Label(phaseLabel, systemImage: "shippingbox")
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    statusPill
+                }
+                .padding(.horizontal, 12).padding(.vertical, 10)
+
+                if phase == .idle {
+                    idleState
+                } else if phase == .scanning {
+                    scanningView
+                } else if phase == .scanned {
+                    Divider()
+                    chooser
+                } else if phase == .running {
+                    applyingView
+                } else if phase == .done {
+                    Divider()
+                    doneView
+                } else if phase == .error {
+                    Divider()
+                    failedView
+                }
+            }
+        }
+    }
+
+    private var idleState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "shippingbox.fill")
+                .font(.system(size: 36, weight: .light))
+                .foregroundColor(Theme.accent.opacity(0.6))
+            Text(loc.t("扫描项目构建产物以查看可清理的内容。",
+                       "Scan project build artifacts to see what can be cleaned."))
+                .font(.system(size: 12))
                 .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.center)
+            Button {
+                startScan()
+            } label: {
+                Label(loc.t("开始扫描", "Start Scan"), systemImage: "magnifyingglass")
             }
+            .buttonStyle(PrimaryButtonStyle())
         }
-    }
-
-    // MARK: - Content
-
-    @ViewBuilder
-    private var content: some View {
-        if !scanRequested {
-            emptyState
-        } else {
-            switch runner.phase {
-            case .scanning:
-                scanningView
-            case .choosing:
-                chooser
-            case .applying:
-                applyingView
-            case .done(let code):
-                doneView(code)
-            case .failed(let message):
-                failedView(message)
-            }
-        }
-    }
-
-    private var emptyState: some View {
-        Card {
-            VStack(spacing: 12) {
-                Image(systemName: "shippingbox.fill")
-                    .font(.system(size: 36, weight: .light))
-                    .foregroundColor(Theme.accent.opacity(0.6))
-                Text(loc.t("点击「开始扫描」以启动 Mole CLI 的交互式清理。",
-                           "Click \"Start Scan\" to launch Mole CLI's interactive purge."))
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity, minHeight: 120)
-        }
+        .frame(maxWidth: .infinity, minHeight: 140)
+        .padding(12)
     }
 
     private var scanningView: some View {
-        Card {
-            HStack(spacing: 10) {
-                ProgressView().controlSize(.small)
-                Text(loc.t("正在通过 Mole CLI 扫描项目构建产物…",
-                           "Scanning project artifacts via Mole CLI…"))
-                    .font(.system(size: 12)).foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
+        HStack(spacing: 10) {
+            ProgressView().controlSize(.small)
+            Text(loc.t("正在扫描项目构建产物…",
+                       "Scanning project artifacts…"))
+                .font(.system(size: 12)).foregroundColor(.secondary)
         }
+        .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+        .padding(12)
     }
 
     private var applyingView: some View {
-        Card {
-            HStack(spacing: 10) {
-                ProgressView().controlSize(.small)
-                Text(loc.t("正在校验选择并执行清理…",
-                           "Verifying selection and purging…"))
-                    .font(.system(size: 12)).foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
+        HStack(spacing: 10) {
+            ProgressView().controlSize(.small)
+            Text(loc.t("正在校验选择并执行清理…",
+                       "Verifying selection and purging…"))
+                .font(.system(size: 12)).foregroundColor(.secondary)
         }
+        .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+        .padding(12)
     }
 
-    // MARK: - Chooser
+    // MARK: - Chooser (扫描结果列表 + 清理入口)
 
     private var chooser: some View {
-        Card(padding: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                // 头部：计数 + 全选 + 显示全部
-                HStack(spacing: 12) {
-                    Text(countLabel)
-                        .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
-                    Spacer()
-                    if !selected.isEmpty {
-                        Text(loc.t("已选 \(selected.count) 项", "\(selected.count) selected"))
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(Theme.accent)
-                    }
-                    Button {
-                        if selected.count == runner.items.count {
-                            selected.removeAll()
-                        } else {
-                            selected = Set(runner.items.indices)
-                        }
-                    } label: {
-                        Text(loc.t("全选", "Select All"))
-                            .font(.system(size: 11))
-                    }
-                    .buttonStyle(.plain).foregroundColor(Theme.accent)
+        VStack(alignment: .leading, spacing: 0) {
+            // 头部：计数 + 全选 + 显示全部
+            HStack(spacing: 12) {
+                Text(countLabel)
+                    .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
+                Spacer()
+                if !selected.isEmpty {
+                    Text(loc.t("已选 \(selected.count) 项", "\(selected.count) selected"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Theme.accent)
                 }
-                .padding(.horizontal, 14).padding(.vertical, 10)
+                Button {
+                    if selected.count == runner.items.count {
+                        selected.removeAll()
+                    } else {
+                        selected = Set(runner.items.indices)
+                    }
+                } label: {
+                    Text(loc.t("全选", "Select All"))
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain).foregroundColor(Theme.accent)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
 
-                Divider()
+            Divider()
 
-                // 条目列表
-                if runner.items.isEmpty {
+            // 条目列表
+            if runner.items.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 28)).foregroundColor(Theme.color(for: .good))
                     Text(loc.t("未发现项目构建产物", "No project artifacts found"))
                         .font(.system(size: 12)).foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 80)
-                } else {
-                    ForEach(Array(runner.items.enumerated()), id: \.offset) { index, item in
-                        itemRow(item, index: index, isSelected: selected.contains(index))
-                        if index < runner.items.count - 1 {
-                            Divider().padding(.leading, 50)
-                        }
-                    }
-                }
-
-                // "显示全部" 滚动捕获提示
-                if runner.loadingAll {
-                    Divider()
-                    HStack(spacing: 7) {
-                        ProgressView().controlSize(.mini)
-                        Text(loc.t("正在加载全部 \(runner.totalCount) 项…（已加载 \(runner.items.count)）",
-                                   "Loading all \(runner.totalCount)… (\(runner.items.count) so far)"))
-                            .font(.system(size: 10)).foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                } else if runner.totalCount > runner.items.count {
-                    Divider()
-                    HStack(spacing: 8) {
-                        Text(loc.t("显示最大的 \(runner.items.count) 项，共 \(runner.totalCount) 项。",
-                                   "Showing the \(runner.items.count) biggest of \(runner.totalCount)."))
-                            .font(.system(size: 10)).foregroundColor(.secondary)
-                        Button {
-                            runner.loadAll()
-                        } label: {
-                            Text(loc.t("显示全部 \(runner.totalCount) 项", "Show all \(runner.totalCount)"))
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(Theme.accent)
-                        }
-                        .buttonStyle(.plain)
-                        Spacer()
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                }
-
-                // 底部操作栏
-                Divider()
-                HStack {
                     Button {
-                        runner.rescan()
-                        selected.removeAll()
+                        resetToIdle()
                     } label: {
-                        Label(loc.t("重新扫描", "Rescan"), systemImage: "arrow.clockwise")
-                            .font(.system(size: 11))
+                        Label(loc.t("返回", "Back"), systemImage: "chevron.left")
                     }
-                    .buttonStyle(.plain).foregroundColor(.secondary)
-                    Spacer()
-                    Button {
-                        showConfirm = true
-                    } label: {
-                        Label(selected.isEmpty
-                              ? loc.t("清理", "Purge")
-                              : loc.t("清理 (\(selected.count))", "Purge (\(selected.count))"),
-                              systemImage: "trash")
-                            .font(.system(size: 12, weight: .semibold))
-                    }
-                    .buttonStyle(PrimaryButtonStyle(disabled: selected.isEmpty))
-                    .disabled(selected.isEmpty)
+                    .buttonStyle(.bordered)
                 }
-                .padding(.horizontal, 14).padding(.vertical, 10)
+                .frame(maxWidth: .infinity, minHeight: 120)
+            } else {
+                ForEach(Array(runner.items.enumerated()), id: \.offset) { index, item in
+                    itemRow(item, index: index, isSelected: selected.contains(index))
+                    if index < runner.items.count - 1 {
+                        Divider().padding(.leading, 50)
+                    }
+                }
             }
+
+            // "显示全部" 滚动捕获提示
+            if runner.loadingAll {
+                Divider()
+                HStack(spacing: 7) {
+                    ProgressView().controlSize(.mini)
+                    Text(loc.t("正在加载全部 \(runner.totalCount) 项…（已加载 \(runner.items.count)）",
+                               "Loading all \(runner.totalCount)… (\(runner.items.count) so far)"))
+                        .font(.system(size: 10)).foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14).padding(.vertical, 8)
+            } else if runner.totalCount > runner.items.count {
+                Divider()
+                HStack(spacing: 8) {
+                    Text(loc.t("显示最大的 \(runner.items.count) 项，共 \(runner.totalCount) 项。",
+                               "Showing the \(runner.items.count) biggest of \(runner.totalCount)."))
+                        .font(.system(size: 10)).foregroundColor(.secondary)
+                    Button {
+                        runner.loadAll()
+                    } label: {
+                        Text(loc.t("显示全部 \(runner.totalCount) 项", "Show all \(runner.totalCount)"))
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(Theme.accent)
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14).padding(.vertical, 8)
+            }
+
+            // 底部操作栏：重新扫描 + 清理入口
+            Divider()
+            HStack {
+                Button {
+                    selected.removeAll()
+                    startScan()
+                } label: {
+                    Label(loc.t("重新扫描", "Rescan"), systemImage: "arrow.clockwise")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain).foregroundColor(.secondary)
+                Spacer()
+                Button {
+                    showConfirm = true
+                } label: {
+                    Label(selected.isEmpty
+                          ? loc.t("清理", "Purge")
+                          : loc.t("清理 (\(selected.count))", "Purge (\(selected.count))"),
+                          systemImage: "trash")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(PrimaryButtonStyle(disabled: selected.isEmpty))
+                .disabled(selected.isEmpty)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
         }
     }
 
@@ -463,79 +529,125 @@ struct PurgeInteractiveView: View {
 
     // MARK: - Result views
 
-    private func doneView(_ code: Int32) -> some View {
+    private var doneView: some View {
+        let code: Int32 = {
+            if case .done(let c) = runner.phase { return c }
+            return -1
+        }()
         let nothing = runner.items.isEmpty && runner.resultText.isEmpty
-        return Card(padding: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    Image(systemName: code == 0 ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                        .font(.system(size: 22))
-                        .foregroundColor(Theme.color(for: code == 0 ? .good : .critical))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(nothing
-                             ? loc.t("未发现可清理的项目", "No artifacts found to purge")
-                             : (code == 0
-                                ? loc.t("清理完成", "Purge complete")
-                                : loc.t("部分失败", "Completed with errors")))
-                            .font(.system(size: 14, weight: .semibold))
-                        if !runner.resultText.isEmpty {
-                            Text(runner.resultText)
-                                .font(.system(size: 11)).foregroundColor(.secondary)
-                                .lineLimit(5)
-                        }
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: code == 0 ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 22))
+                    .foregroundColor(Theme.color(for: code == 0 ? .good : .critical))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(nothing
+                         ? loc.t("未发现可清理的项目", "No artifacts found to purge")
+                         : (code == 0
+                            ? loc.t("清理完成", "Purge complete")
+                            : loc.t("部分失败", "Completed with errors")))
+                        .font(.system(size: 14, weight: .semibold))
+                    if !runner.resultText.isEmpty {
+                        Text(runner.resultText)
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                            .lineLimit(5)
                     }
-                    Spacer()
                 }
-                if code == 0 && !nothing {
-                    HStack(spacing: 8) {
-                        Button {
-                            let trashPath = NSString(string: "~/.Trash").expandingTildeInPath
-                            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: trashPath)])
-                        } label: {
-                            Label(loc.t("打开废纸篓", "Open Trash"), systemImage: "trash")
-                        }
-                        .buttonStyle(.bordered)
-                        Button {
-                            selected.removeAll()
-                            scanRequested = false
-                        } label: {
-                            Label(loc.t("完成", "Done"), systemImage: "checkmark")
-                        }
-                        .buttonStyle(.bordered)
+                Spacer()
+            }
+            if code == 0 && !nothing {
+                HStack(spacing: 8) {
+                    Button {
+                        let trashPath = NSString(string: "~/.Trash").expandingTildeInPath
+                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: trashPath)])
+                    } label: {
+                        Label(loc.t("打开废纸篓", "Open Trash"), systemImage: "trash")
                     }
+                    .buttonStyle(.bordered)
+                    Button {
+                        resetToIdle()
+                    } label: {
+                        Label(loc.t("完成", "Done"), systemImage: "checkmark")
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
         }
+        .padding(12)
     }
 
-    private func failedView(_ message: String) -> some View {
-        Card(padding: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 22))
-                        .foregroundColor(Theme.color(for: .critical))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(loc.t("清理失败", "Purge failed"))
-                            .font(.system(size: 14, weight: .semibold))
-                        Text(message)
-                            .font(.system(size: 11)).foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer()
+    private var failedView: some View {
+        let message: String = {
+            if case .failed(let m) = runner.phase { return m }
+            return ""
+        }()
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 22))
+                    .foregroundColor(Theme.color(for: .critical))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(loc.t("清理失败", "Purge failed"))
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(message)
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Button {
-                    selected.removeAll()
-                    scanRequested = false
-                } label: {
-                    Label(loc.t("返回", "Back"), systemImage: "chevron.left")
-                }
-                .buttonStyle(.bordered)
+                Spacer()
             }
+            Button {
+                resetToIdle()
+            } label: {
+                Label(loc.t("返回", "Back"), systemImage: "chevron.left")
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(12)
+    }
+
+    // MARK: - Status pill
+
+    @ViewBuilder
+    private var statusPill: some View {
+        if phase == .scanning || phase == .running {
+            HStack(spacing: 5) {
+                ProgressView().controlSize(.mini)
+                Text(loc.t("运行中", "running")).font(.system(size: 10))
+            }
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(.quaternary, in: Capsule())
+        } else if phase == .done {
+            let code: Int32 = {
+                if case .done(let c) = runner.phase { return c }
+                return -1
+            }()
+            let succeeded = code == 0
+            Text(succeeded ? loc.t("✓ 完成", "✓ done") : loc.t("失败", "failed"))
+                .font(.system(size: 10, weight: .semibold))
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(Theme.color(for: succeeded ? .good : .critical).opacity(0.18), in: Capsule())
+                .foregroundColor(Theme.color(for: succeeded ? .good : .critical))
+        } else if phase == .error {
+            Text(loc.t("失败", "failed"))
+                .font(.system(size: 10, weight: .semibold))
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(Theme.color(for: .critical).opacity(0.18), in: Capsule())
+                .foregroundColor(Theme.color(for: .critical))
         }
     }
 
     // MARK: - Helpers
+
+    private var phaseLabel: String {
+        switch phase {
+        case .idle:    return loc.t("扫描结果", "Scan Results")
+        case .scanning: return loc.t("扫描中…", "Scanning…")
+        case .scanned: return loc.t("扫描完成", "Scan Complete")
+        case .running: return loc.t("运行中…", "Running…")
+        case .done:    return loc.t("已完成", "Finished")
+        case .error:   return loc.t("扫描失败", "Scan failed")
+        }
+    }
 
     private var countLabel: String {
         if runner.totalCount > runner.items.count {
@@ -549,14 +661,44 @@ struct PurgeInteractiveView: View {
         let preview = targets.prefix(12).map { "• \($0.name)" }.joined(separator: "\n")
         let more = targets.count > 12 ? "\n… \(loc.t("还有 \(targets.count - 12) 项", "and \(targets.count - 12) more"))" : ""
         return loc.t(
-            "Mole 将删除以下 \(targets.count) 个项目的构建产物：\n\n\(preview)\(more)\n\n由 Mole CLI 执行删除，路由到废纸篓。",
-            "Mole will remove build artifacts from these \(targets.count) projects:\n\n\(preview)\(more)\n\nDeletion is performed by Mole CLI, routed to Trash."
+            "将删除以下 \(targets.count) 个项目的构建产物：\n\n\(preview)\(more)\n\n删除路由到废纸篓，可从废纸篓恢复。",
+            "Build artifacts from these \(targets.count) projects will be removed:\n\n\(preview)\(more)\n\nDeletion is routed to Trash, recoverable from Trash."
         )
     }
 
     private func startScan() {
-        scanRequested = true
+        phase = .scanning
+        showCategories = false
         selected.removeAll()
         runner.start()
+    }
+
+    private func syncPhaseFromRunner(_ runnerPhase: PurgeInteractiveRunner.Phase) {
+        switch runnerPhase {
+        case .scanning:
+            if phase != .scanning { phase = .scanning }
+        case .choosing:
+            if phase == .scanning { phase = .scanned }
+        case .applying:
+            if phase != .running { phase = .running }
+        case .done(let code):
+            if phase != .done && phase != .error {
+                phase = code == 0 ? .done : .error
+            }
+        case .failed:
+            if phase != .error { phase = .error }
+        }
+    }
+
+    private func runNow() {
+        phase = .running
+        runner.confirm(selected)
+    }
+
+    private func resetToIdle() {
+        runner.cancel()
+        selected.removeAll()
+        phase = .idle
+        showCategories = true
     }
 }
