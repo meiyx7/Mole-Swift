@@ -499,7 +499,7 @@ struct StatusView: View {
                         ForEach(paired, id: \.idx) { p in
                             LineMark(
                                 x: .value("t", p.idx),
-                                y: .value("rate", p.rx)
+                                y: .value("下载", p.rx)
                             )
                             .foregroundStyle(.green)
                             .interpolationMethod(.catmullRom)
@@ -507,7 +507,7 @@ struct StatusView: View {
                         ForEach(paired, id: \.idx) { p in
                             LineMark(
                                 x: .value("t", p.idx),
-                                y: .value("rate", p.tx)
+                                y: .value("上传", p.tx)
                             )
                             .foregroundStyle(.orange)
                             .interpolationMethod(.catmullRom)
