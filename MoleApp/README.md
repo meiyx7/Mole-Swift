@@ -12,7 +12,7 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 | 磁盘分析 / Disk Explorer | 可视化磁盘占用，支持逐级进入子目录，面包屑导航可点击返回任意层级 |
 | 清理 / Clean | 深度清理系统缓存、应用残留，扫描后确认执行 |
 | 优化 / Optimize | 刷新系统缓存与服务，维护 Mac 性能 |
-| 清理项目 / Purge Projects | 回收项目构建产物（node_modules、build 目录等） |
+| 清理项目 / Purge Projects | 回收项目构建产物（node_modules、build 目录等），支持本地扫描和 CLI 交互两种模式 |
 | 安装包 / Installer Files | 查找并清理残留的安装包文件 |
 | 卸载应用 / Uninstall Apps | 移除应用程序及其残留文件，支持按大小/日期/名称排序，移至废纸篓可恢复 |
 | 历史记录 / History | 查看清理活动记录 |
@@ -36,6 +36,15 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 - App 启动时会自动后台检查新版本
 
 ## 版本记录 / Changelog
+
+### v1.6.0
+
+- 新增「清理项目（CLI 交互）」二级菜单，与原有「清理项目（本地扫描）」并存
+- CLI 交互模式参照 Burrow 项目实现：用伪终端（PTY）驱动 `mo purge` 的交互式选择 TUI
+- 解析 Mole TUI 的 checklist 为原生列表，用户勾选后回放按键（↓/Space/Enter）给 Mole，由 Mole 自己执行删除
+- 三重安全校验：屏幕选择稳定+身份匹配 → Mole 确认屏计数匹配 → 任何不符中止且不删除
+- 支持长列表滚动捕获（"显示全部 N 项"），跨视口选择逐行滚动校验
+- 两种 purge 模式可对比：本地扫描（App 用 FileManager.trashItem 删除）vs CLI 交互（Mole CLI 执行删除）
 
 ### v1.5.11
 

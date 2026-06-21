@@ -8,6 +8,7 @@ enum Feature: String, CaseIterable, Identifiable, Hashable {
     case uninstall
     case optimize
     case purge
+    case purgeInteractive
     case installer
     case history
     case settings
@@ -21,7 +22,8 @@ enum Feature: String, CaseIterable, Identifiable, Hashable {
         case .clean: return loc.t("清理", "Clean")
         case .uninstall: return loc.t("卸载应用", "Uninstall Apps")
         case .optimize: return loc.t("优化", "Optimize")
-        case .purge: return loc.t("清理项目", "Purge Projects")
+        case .purge: return loc.t("清理项目（本地扫描）", "Purge Projects (Local)")
+        case .purgeInteractive: return loc.t("清理项目（CLI 交互）", "Purge Projects (CLI)")
         case .installer: return loc.t("安装包", "Installer Files")
         case .history: return loc.t("历史记录", "History")
         case .settings: return loc.t("设置", "Settings")
@@ -35,7 +37,8 @@ enum Feature: String, CaseIterable, Identifiable, Hashable {
         case .clean: return loc.t("深度清理", "Deep cleanup")
         case .uninstall: return loc.t("移除应用程序", "Remove applications")
         case .optimize: return loc.t("刷新缓存与服务", "Refresh caches & services")
-        case .purge: return loc.t("回收构建产物", "Reclaim build artifacts")
+        case .purge: return loc.t("原生扫描，App 删除", "Native scan, app deletes")
+        case .purgeInteractive: return loc.t("PTY 驱动 CLI，Mole 删除", "PTY-driven CLI, Mole deletes")
         case .installer: return loc.t("查找残留安装包", "Find leftover installers")
         case .history: return loc.t("清理活动记录", "Cleanup activity")
         case .settings: return loc.t("Touch ID、更新等", "Touch ID, updates & more")
@@ -50,6 +53,7 @@ enum Feature: String, CaseIterable, Identifiable, Hashable {
         case .uninstall: return "trash.slash"
         case .optimize: return "wand.and.stars"
         case .purge: return "shippingbox"
+        case .purgeInteractive: return "shippingbox.fill"
         case .installer: return "shippingbox.fill"
         case .history: return "clock.arrow.circlepath"
         case .settings: return "gearshape"
@@ -78,7 +82,7 @@ enum FeatureSection: String, CaseIterable, Identifiable {
     var features: [Feature] {
         switch self {
         case .overview: return [.status, .analyze]
-        case .cleanup: return [.clean, .optimize, .purge, .installer]
+        case .cleanup: return [.clean, .optimize, .purge, .purgeInteractive, .installer]
         case .management: return [.uninstall, .history]
         case .system: return [.settings]
         }
