@@ -143,9 +143,8 @@ final class PurgeInteractiveRunner: ObservableObject {
 
 /// 清理项目视图：扫描项目构建产物，勾选后由 Mole 执行删除（路由到废纸篓）。
 ///
-/// 布局与 CleanView/InstallerView 保持一致：
-/// header → stepGuide → categoriesCard（功能说明）→ previewCard（扫描结果）。
-/// 扫描入口内嵌在扫描结果卡片中，结果为空时提示开始扫描。
+/// 布局规范（与 CleanupScreen/InstallerView 一致）：
+/// header（无按钮）→ stepGuide → categoriesCard（功能说明）→ previewCard（扫描结果 + 内嵌操作栏）。
 struct PurgeInteractiveView: View {
     @EnvironmentObject private var service: MoleService
     @EnvironmentObject private var loc: Localization
@@ -194,35 +193,8 @@ struct PurgeInteractiveView: View {
             title: loc.t("清理项目", "Purge Projects"),
             subtitle: loc.t("扫描并清理项目构建产物（node_modules、build 目录等），由 Mole 执行删除。",
                             "Scan and clean project build artifacts (node_modules, build dirs, etc.). Mole performs the deletion."),
-            systemImage: "shippingbox.fill",
-            trailing: AnyView(actionButtons)
+            systemImage: "shippingbox.fill"
         )
-    }
-
-    private var actionButtons: some View {
-        HStack(spacing: 8) {
-            if isRunning {
-                Button(loc.t("停止", "Stop"), role: .destructive) {
-                    runner.cancel()
-                    if phase == .scanning || phase == .running {
-                        phase = .idle
-                        selected.removeAll()
-                    }
-                }
-                .buttonStyle(.bordered)
-            } else if phase == .done {
-                Button {
-                    resetToIdle()
-                } label: {
-                    Label(loc.t("再清理一次", "Run Again"), systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(PrimaryButtonStyle())
-            }
-        }
-    }
-
-    private var isRunning: Bool {
-        phase == .scanning || phase == .running
     }
 
     // MARK: - Step guide
@@ -304,11 +276,12 @@ struct PurgeInteractiveView: View {
         }
     }
 
-    // MARK: - Preview card (扫描结果)
+    // MARK: - Preview card (扫描结果 + 内嵌操作栏)
 
     private var previewCard: some View {
         Card(padding: 0) {
             VStack(alignment: .leading, spacing: 0) {
+                // 头部：标题 + 状态
                 HStack {
                     Label(phaseLabel, systemImage: "shippingbox")
                         .font(.system(size: 13, weight: .semibold))
@@ -317,72 +290,62 @@ struct PurgeInteractiveView: View {
                 }
                 .padding(.horizontal, 12).padding(.vertical, 10)
 
-                if phase == .idle {
-                    idleState
-                } else if phase == .scanning {
-                    scanningView
-                } else if phase == .scanned {
-                    Divider()
-                    chooser
-                } else if phase == .running {
-                    applyingView
-                } else if phase == .done {
-                    Divider()
-                    doneView
-                } else if phase == .error {
-                    Divider()
-                    failedView
-                }
+                Divider()
+                contentArea
+
+                Divider()
+                actionBar
+                    .padding(.horizontal, 12).padding(.vertical, 10)
             }
         }
     }
 
-    private var idleState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "shippingbox.fill")
-                .font(.system(size: 36, weight: .light))
-                .foregroundColor(Theme.accent.opacity(0.6))
-            Text(loc.t("扫描项目构建产物以查看可清理的内容。",
-                       "Scan project build artifacts to see what can be cleaned."))
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-            Button {
-                startScan()
-            } label: {
-                Label(loc.t("开始扫描", "Start Scan"), systemImage: "magnifyingglass")
+    @ViewBuilder
+    private var contentArea: some View {
+        if phase == .idle {
+            VStack(spacing: 10) {
+                Image(systemName: "shippingbox.fill")
+                    .font(.system(size: 28, weight: .light))
+                    .foregroundColor(Theme.accent.opacity(0.6))
+                Text(loc.t("扫描项目构建产物以查看可清理的内容。",
+                           "Scan project build artifacts to see what can be cleaned."))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
             }
-            .buttonStyle(PrimaryButtonStyle())
+            .frame(maxWidth: .infinity, minHeight: 120)
+            .padding(12)
+        } else if phase == .scanning {
+            HStack(spacing: 10) {
+                ProgressView().controlSize(.small)
+                Text(loc.t("正在扫描项目构建产物…",
+                           "Scanning project artifacts…"))
+                    .font(.system(size: 12)).foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+            .padding(12)
+        } else if phase == .running {
+            HStack(spacing: 10) {
+                ProgressView().controlSize(.small)
+                Text(loc.t("正在校验选择并执行清理…",
+                           "Verifying selection and purging…"))
+                    .font(.system(size: 12)).foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+            .padding(12)
+        } else if phase == .done {
+            doneContent
+        } else if phase == .error {
+            errorContent
+        } else {
+            // scanned
+            chooserContent
         }
-        .frame(maxWidth: .infinity, minHeight: 140)
-        .padding(12)
     }
 
-    private var scanningView: some View {
-        HStack(spacing: 10) {
-            ProgressView().controlSize(.small)
-            Text(loc.t("正在扫描项目构建产物…",
-                       "Scanning project artifacts…"))
-                .font(.system(size: 12)).foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
-        .padding(12)
-    }
+    // MARK: - Chooser content (扫描结果列表，不含操作栏)
 
-    private var applyingView: some View {
-        HStack(spacing: 10) {
-            ProgressView().controlSize(.small)
-            Text(loc.t("正在校验选择并执行清理…",
-                       "Verifying selection and purging…"))
-                .font(.system(size: 12)).foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
-        .padding(12)
-    }
-
-    // MARK: - Chooser (扫描结果列表 + 清理入口)
-
-    private var chooser: some View {
+    private var chooserContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             // 头部：计数 + 全选 + 显示全部
             HStack(spacing: 12) {
@@ -417,14 +380,9 @@ struct PurgeInteractiveView: View {
                         .font(.system(size: 28)).foregroundColor(Theme.color(for: .good))
                     Text(loc.t("未发现项目构建产物", "No project artifacts found"))
                         .font(.system(size: 12)).foregroundColor(.secondary)
-                    Button {
-                        resetToIdle()
-                    } label: {
-                        Label(loc.t("返回", "Back"), systemImage: "chevron.left")
-                    }
-                    .buttonStyle(.bordered)
                 }
                 .frame(maxWidth: .infinity, minHeight: 120)
+                .padding(12)
             } else {
                 ForEach(Array(runner.items.enumerated()), id: \.offset) { index, item in
                     itemRow(item, index: index, isSelected: selected.contains(index))
@@ -464,32 +422,6 @@ struct PurgeInteractiveView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14).padding(.vertical, 8)
             }
-
-            // 底部操作栏：重新扫描 + 清理入口
-            Divider()
-            HStack {
-                Button {
-                    selected.removeAll()
-                    startScan()
-                } label: {
-                    Label(loc.t("重新扫描", "Rescan"), systemImage: "arrow.clockwise")
-                        .font(.system(size: 11))
-                }
-                .buttonStyle(.plain).foregroundColor(.secondary)
-                Spacer()
-                Button {
-                    showConfirm = true
-                } label: {
-                    Label(selected.isEmpty
-                          ? loc.t("清理", "Purge")
-                          : loc.t("清理 (\(selected.count))", "Purge (\(selected.count))"),
-                          systemImage: "trash")
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .buttonStyle(PrimaryButtonStyle(disabled: selected.isEmpty))
-                .disabled(selected.isEmpty)
-            }
-            .padding(.horizontal, 14).padding(.vertical, 10)
         }
     }
 
@@ -529,7 +461,7 @@ struct PurgeInteractiveView: View {
 
     // MARK: - Result views
 
-    private var doneView: some View {
+    private var doneContent: some View {
         let code: Int32 = {
             if case .done(let c) = runner.phase { return c }
             return -1
@@ -555,28 +487,11 @@ struct PurgeInteractiveView: View {
                 }
                 Spacer()
             }
-            if code == 0 && !nothing {
-                HStack(spacing: 8) {
-                    Button {
-                        let trashPath = NSString(string: "~/.Trash").expandingTildeInPath
-                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: trashPath)])
-                    } label: {
-                        Label(loc.t("打开废纸篓", "Open Trash"), systemImage: "trash")
-                    }
-                    .buttonStyle(.bordered)
-                    Button {
-                        resetToIdle()
-                    } label: {
-                        Label(loc.t("完成", "Done"), systemImage: "checkmark")
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
         }
         .padding(12)
     }
 
-    private var failedView: some View {
+    private var errorContent: some View {
         let message: String = {
             if case .failed(let m) = runner.phase { return m }
             return ""
@@ -595,14 +510,85 @@ struct PurgeInteractiveView: View {
                 }
                 Spacer()
             }
-            Button {
-                resetToIdle()
-            } label: {
-                Label(loc.t("返回", "Back"), systemImage: "chevron.left")
-            }
-            .buttonStyle(.bordered)
         }
         .padding(12)
+    }
+
+    // MARK: - Action bar (内嵌在扫描结果卡片底部，四个模块统一)
+
+    @ViewBuilder
+    private var actionBar: some View {
+        HStack {
+            switch phase {
+            case .idle:
+                Spacer()
+                Button {
+                    startScan()
+                } label: {
+                    Label(loc.t("开始扫描", "Start Scan"), systemImage: "magnifyingglass")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            case .scanning:
+                Spacer()
+                Button(loc.t("停止", "Stop"), role: .destructive) {
+                    runner.cancel()
+                    phase = .idle
+                    selected.removeAll()
+                }
+                .buttonStyle(.bordered)
+            case .scanned:
+                Button {
+                    selected.removeAll()
+                    startScan()
+                } label: {
+                    Label(loc.t("重新扫描", "Rescan"), systemImage: "arrow.clockwise")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain).foregroundColor(.secondary)
+                Spacer()
+                Button {
+                    showConfirm = true
+                } label: {
+                    Label(selected.isEmpty
+                          ? loc.t("清理", "Purge")
+                          : loc.t("清理 (\(selected.count))", "Purge (\(selected.count))"),
+                          systemImage: "trash")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(PrimaryButtonStyle(disabled: selected.isEmpty))
+                .disabled(selected.isEmpty)
+            case .running:
+                Spacer()
+                Button(loc.t("停止", "Stop"), role: .destructive) {
+                    runner.cancel()
+                    phase = .idle
+                    selected.removeAll()
+                }
+                .buttonStyle(.bordered)
+            case .done:
+                let code: Int32 = {
+                    if case .done(let c) = runner.phase { return c }
+                    return -1
+                }()
+                if code == 0 {
+                    Button { openTrash() } label: {
+                        Label(loc.t("打开废纸篓", "Open Trash"), systemImage: "trash")
+                    }
+                    .buttonStyle(.bordered)
+                }
+                Spacer()
+                Button { resetToIdle() } label: {
+                    Label(loc.t("再清理一次", "Run Again"), systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            case .error:
+                Spacer()
+                Button { resetToIdle() } label: {
+                    Label(loc.t("重试扫描", "Retry scan"), systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+        }
     }
 
     // MARK: - Status pill
@@ -664,6 +650,11 @@ struct PurgeInteractiveView: View {
             "将删除以下 \(targets.count) 个项目的构建产物：\n\n\(preview)\(more)\n\n删除路由到废纸篓，可从废纸篓恢复。",
             "Build artifacts from these \(targets.count) projects will be removed:\n\n\(preview)\(more)\n\nDeletion is routed to Trash, recoverable from Trash."
         )
+    }
+
+    private func openTrash() {
+        let trashPath = NSString(string: "~/.Trash").expandingTildeInPath
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: trashPath)])
     }
 
     private func startScan() {

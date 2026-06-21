@@ -8,6 +8,9 @@ import SwiftUI
 /// discovers the files directly in Swift and renders them as a visual list.
 /// The "Run" action still shells out to `mo installer` for the actual
 /// deletion (with Trash routing, safety checks, etc.).
+///
+/// 布局规范（与 CleanupScreen/PurgeInteractiveView 一致）：
+/// header（无按钮）→ stepGuide → categoriesCard（功能说明）→ previewCard（扫描结果 + 内嵌操作栏）。
 struct InstallerView: View {
     @EnvironmentObject private var service: MoleService
     @EnvironmentObject private var loc: Localization
@@ -53,60 +56,14 @@ struct InstallerView: View {
         }
     }
 
-    // MARK: - Header & actions
+    // MARK: - Header
 
     private var header: some View {
         FeatureHeader(
             title: loc.t("安装包文件", "Installer Files"),
             subtitle: loc.t("查找并删除残留的安装包、DMG、PKG 和 ISO 文件。", "Find and remove leftover installers, DMGs, PKGs and ISOs."),
-            systemImage: "shippingbox.fill",
-            trailing: AnyView(actionButtons)
+            systemImage: "shippingbox.fill"
         )
-    }
-
-    private var actionButtons: some View {
-        HStack(spacing: 8) {
-            if runner.isRunning {
-                Button(loc.t("停止", "Stop"), role: .destructive) { runner.cancel() }.buttonStyle(.bordered)
-            } else {
-                Button {
-                    if phase == .scanned {
-                        showConfirm = true
-                    } else {
-                        scanNow()
-                    }
-                } label: {
-                    Label(primaryActionLabel, systemImage: primaryActionIcon)
-                }
-                .buttonStyle(PrimaryButtonStyle(disabled: !canRunPrimary))
-                .disabled(!canRunPrimary)
-            }
-        }
-    }
-
-    private var canRunPrimary: Bool {
-        if runner.isRunning { return false }
-        if phase == .idle || phase == .scanning { return true }
-        if phase == .scanned { return !foundFiles.isEmpty }
-        return false
-    }
-
-    private var primaryActionLabel: String {
-        switch phase {
-        case .idle, .scanning: return loc.t("扫描", "Scan")
-        case .scanned:         return loc.t("运行", "Run")
-        case .running:         return loc.t("运行中…", "Running…")
-        case .done:            return loc.t("已完成", "Done")
-        }
-    }
-
-    private var primaryActionIcon: String {
-        switch phase {
-        case .idle, .scanning: return "magnifyingglass"
-        case .scanned:         return "shippingbox.fill"
-        case .running:         return "circle.dashed"
-        case .done:            return "checkmark.circle.fill"
-        }
     }
 
     // MARK: - Step guide
@@ -173,11 +130,12 @@ struct InstallerView: View {
         }
     }
 
-    // MARK: - Preview card
+    // MARK: - Preview card (扫描结果 + 内嵌操作栏)
 
     private var previewCard: some View {
-        Card(padding: 12) {
-            VStack(alignment: .leading, spacing: 8) {
+        Card(padding: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                // 头部：标题 + 状态
                 HStack {
                     Label(phaseLabel, systemImage: "shippingbox")
                         .font(.system(size: 13, weight: .semibold))
@@ -192,40 +150,100 @@ struct InstallerView: View {
                         .buttonStyle(.borderless)
                     }
                 }
+                .padding(.horizontal, 12).padding(.vertical, 10)
 
-                if phase == .idle {
-                    Text(loc.t("点击「扫描」查找可安全删除的安装包文件（.dmg、.pkg、.iso、.xip、.zip）。", "Click \"Scan\" to find installer files safe to delete (.dmg, .pkg, .iso, .xip, .zip)."))
-                        .font(.system(size: 12)).foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
-                        .multilineTextAlignment(.center)
-                } else if phase == .scanning {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text(loc.t("正在扫描下载、桌面等目录…", "Scanning Downloads, Desktop, and other paths…"))
-                            .font(.system(size: 12)).foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
-                } else if showRawConsole {
-                    ConsoleOutputView(lines: runner.lines)
-                        .frame(minHeight: 220, maxHeight: 360)
-                } else if !foundFiles.isEmpty {
-                    filesList
-                } else if let err = scanError {
-                    Text(loc.t("扫描出错：", "Scan error: ") + err)
-                        .font(.system(size: 12)).foregroundColor(Theme.color(for: .critical))
-                        .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
-                } else {
-                    // Scanned but nothing found.
-                    VStack(spacing: 8) {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 28)).foregroundColor(Theme.color(for: .good))
-                        Text(loc.t("未发现安装包文件，你的 Mac 很干净！", "No installer files found. Your Mac is clean!"))
-                            .font(.system(size: 12)).foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
-                }
+                Divider()
+                contentArea
+
+                Divider()
+                actionBar
+                    .padding(.horizontal, 12).padding(.vertical, 10)
             }
         }
+    }
+
+    @ViewBuilder
+    private var contentArea: some View {
+        if phase == .idle {
+            Text(loc.t("点击「开始扫描」查找可安全删除的安装包文件（.dmg、.pkg、.iso、.xip、.zip）。",
+                       "Click \"Start Scan\" to find installer files safe to delete (.dmg, .pkg, .iso, .xip, .zip)."))
+                .font(.system(size: 12)).foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+                .multilineTextAlignment(.center)
+                .padding(12)
+        } else if phase == .scanning {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(loc.t("正在扫描下载、桌面等目录…", "Scanning Downloads, Desktop, and other paths…"))
+                    .font(.system(size: 12)).foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+            .padding(12)
+        } else if phase == .running {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(loc.t("正在运行…", "Running…"))
+                    .font(.system(size: 12)).foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+            .padding(12)
+        } else if phase == .done {
+            doneContent
+        } else {
+            // scanned
+            if showRawConsole {
+                ConsoleOutputView(lines: runner.lines)
+                    .frame(minHeight: 220, maxHeight: 360)
+                    .padding(12)
+            } else if !foundFiles.isEmpty {
+                filesList
+                    .padding(12)
+            } else if let err = scanError {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 28)).foregroundColor(Theme.color(for: .critical))
+                    Text(loc.t("扫描出错：", "Scan error: ") + err)
+                        .font(.system(size: 12)).foregroundColor(Theme.color(for: .critical))
+                }
+                .frame(maxWidth: .infinity, minHeight: 120)
+                .padding(12)
+            } else {
+                // Scanned but nothing found.
+                VStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 28)).foregroundColor(Theme.color(for: .good))
+                    Text(loc.t("未发现安装包文件，你的 Mac 很干净！", "No installer files found. Your Mac is clean!"))
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 120)
+                .padding(12)
+            }
+        }
+    }
+
+    private var doneContent: some View {
+        let succeeded = runner.succeeded
+        let cancelled = runner.wasCancelled
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: cancelled ? "stop.circle.fill" : (succeeded ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"))
+                    .font(.system(size: 22))
+                    .foregroundColor(Theme.color(for: cancelled ? .neutral : (succeeded ? .good : .critical)))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(cancelled
+                         ? loc.t("已取消", "Cancelled")
+                         : (succeeded
+                            ? loc.t("完成", "Finished")
+                            : loc.t("未完全成功", "Completed with errors")))
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(loc.t("安装包文件已移至废纸篓，可从废纸篓恢复。",
+                               "Installer files moved to Trash, recoverable from Trash."))
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                }
+                Spacer()
+            }
+        }
+        .padding(12)
     }
 
     private var filesList: some View {
@@ -279,15 +297,62 @@ struct InstallerView: View {
         }
     }
 
-    private var phaseLabel: String {
-        switch phase {
-        case .idle: return loc.t("扫描结果", "Scan Results")
-        case .scanning: return loc.t("扫描中…", "Scanning…")
-        case .scanned: return loc.t("扫描完成", "Scan Complete")
-        case .running: return loc.t("运行中…", "Running…")
-        case .done: return loc.t("已完成", "Finished")
+    // MARK: - Action bar (内嵌在扫描结果卡片底部，四个模块统一)
+
+    @ViewBuilder
+    private var actionBar: some View {
+        HStack {
+            switch phase {
+            case .idle:
+                Spacer()
+                Button {
+                    scanNow()
+                } label: {
+                    Label(loc.t("开始扫描", "Start Scan"), systemImage: "magnifyingglass")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            case .scanning:
+                Spacer()
+                Button(loc.t("停止", "Stop"), role: .destructive) { runner.cancel() }
+                    .buttonStyle(.bordered)
+            case .scanned:
+                Button {
+                    resetToIdle()
+                } label: {
+                    Label(loc.t("重新扫描", "Rescan"), systemImage: "arrow.clockwise")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain).foregroundColor(.secondary)
+                Spacer()
+                Button {
+                    showConfirm = true
+                } label: {
+                    Label(loc.t("运行", "Run"), systemImage: "shippingbox.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(PrimaryButtonStyle(disabled: foundFiles.isEmpty))
+                .disabled(foundFiles.isEmpty)
+            case .running:
+                Spacer()
+                Button(loc.t("停止", "Stop"), role: .destructive) { runner.cancel() }
+                    .buttonStyle(.bordered)
+            case .done:
+                if runner.succeeded {
+                    Button { openTrash() } label: {
+                        Label(loc.t("打开废纸篓", "Open Trash"), systemImage: "trash")
+                    }
+                    .buttonStyle(.bordered)
+                }
+                Spacer()
+                Button { resetToIdle() } label: {
+                    Label(loc.t("再清理一次", "Run Again"), systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
         }
     }
+
+    // MARK: - Status pill
 
     @ViewBuilder
     private var statusPill: some View {
@@ -299,12 +364,27 @@ struct InstallerView: View {
             .background(.quaternary, in: Capsule())
         } else if let code = runner.exitCode {
             let tone: StatusTone = code == 0 ? .good : .critical
-            Text(code == 0 ? loc.t("✓ 完成", "✓ exit 0") : loc.t("退出 \(code)", "exit \(code)"))
+            Text(code == 0 ? loc.t("✓ 完成", "✓ done") : loc.t("退出 \(code)", "exit \(code)"))
                 .font(.system(size: 10, weight: .semibold))
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Theme.color(for: tone).opacity(0.18), in: Capsule())
                 .foregroundColor(Theme.color(for: tone))
         }
+    }
+
+    private var phaseLabel: String {
+        switch phase {
+        case .idle: return loc.t("扫描结果", "Scan Results")
+        case .scanning: return loc.t("扫描中…", "Scanning…")
+        case .scanned: return loc.t("扫描完成", "Scan Complete")
+        case .running: return loc.t("运行中…", "Running…")
+        case .done: return loc.t("已完成", "Finished")
+        }
+    }
+
+    private func openTrash() {
+        let trashPath = NSString(string: "~/.Trash").expandingTildeInPath
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: trashPath)])
     }
 
     // MARK: - Actions
@@ -330,5 +410,16 @@ struct InstallerView: View {
             }
             phase = .done
         }
+    }
+
+    private func resetToIdle() {
+        runner.cancel()
+        runner.lines.removeAll()
+        runner.exitCode = nil
+        runner.error = nil
+        foundFiles.removeAll()
+        scanError = nil
+        phase = .idle
+        showCategories = true
     }
 }

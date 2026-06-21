@@ -4,6 +4,9 @@ import SwiftUI
 /// (Clean, Optimize, Purge, Installer). Each provides its title, categories,
 /// the two service calls, and optional confirmation/result copy; this view
 /// handles the lifecycle, the visual preview, and the raw console fallback.
+///
+/// 布局规范（与 InstallerView/PurgeInteractiveView 一致）：
+/// header（无按钮）→ stepGuide → categoriesCard（功能说明）→ previewCard（扫描结果 + 内嵌操作栏）。
 struct CleanupScreen: View {
     let title: String
     let subtitle: String
@@ -53,9 +56,6 @@ struct CleanupScreen: View {
                 stepGuide
                 categoriesCard
                 previewCard
-                if phase == .done {
-                    resultBanner
-                }
             }
         }
         .featurePadding()
@@ -82,8 +82,7 @@ struct CleanupScreen: View {
         FeatureHeader(
             title: title,
             subtitle: subtitle,
-            systemImage: systemImage,
-            trailing: AnyView(actionButtons)
+            systemImage: systemImage
         )
     }
 
@@ -107,71 +106,7 @@ struct CleanupScreen: View {
         phase == .previewed || phase == .running || phase == .done || phase == .error
     }
 
-    // MARK: - Actions
-
-    private var actionButtons: some View {
-        HStack(spacing: 8) {
-            if runner.isRunning {
-                Button(loc.t("停止", "Stop"), role: .destructive) { runner.cancel() }.buttonStyle(.bordered)
-            } else if phase == .done {
-                Button {
-                    resetToIdle()
-                } label: {
-                    Label(loc.t("再试一次", "Run Again"), systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(PrimaryButtonStyle())
-            } else {
-                // Single primary action whose label/behaviour follows the flow:
-                // idle/previewing → "Scan", previewed → "Run".
-                // The button is visibly disabled (flat gray) until the scan
-                // step is done, so the gating is obvious without a second button.
-                Button {
-                    if phase == .previewed {
-                        showConfirm = true
-                    } else {
-                        Task { await runPreview() }
-                    }
-                } label: {
-                    Label(primaryActionLabel, systemImage: primaryActionIcon)
-                }
-                .buttonStyle(PrimaryButtonStyle(disabled: !canRunPrimary))
-                .disabled(!canRunPrimary)
-            }
-        }
-    }
-
-    private var canRunPrimary: Bool {
-        if runner.isRunning { return false }
-        if phase == .idle || phase == .previewing { return true }   // can start scan
-        if phase == .previewed { return runner.hasOutput }          // can run after scan
-        if phase == .error { return true }                          // can retry from error
-        return false                                                // running/done
-    }
-
-    private var primaryActionLabel: String {
-        switch phase {
-        case .idle, .previewing:
-            return loc.t("扫描", "Scan")
-        case .previewed:
-            return actionLabel ?? loc.t("运行", "Run")
-        case .running:
-            return loc.t("运行中…", "Running…")
-        case .done:
-            return loc.t("已完成", "Done")
-        case .error:
-            return loc.t("重试扫描", "Retry scan")
-        }
-    }
-
-    private var primaryActionIcon: String {
-        switch phase {
-        case .idle, .previewing: return "eye"
-        case .previewed:         return systemImage
-        case .running:           return "circle.dashed"
-        case .done:              return "checkmark.circle.fill"
-        case .error:             return "arrow.clockwise"
-        }
-    }
+    // MARK: - Categories card
 
     private var categoriesCard: some View {
         Card {
@@ -212,11 +147,12 @@ struct CleanupScreen: View {
         .animation(.easeInOut(duration: 0.2), value: showCategories)
     }
 
-    // MARK: - Preview card (visual + raw console toggle)
+    // MARK: - Preview card (扫描结果 + 内嵌操作栏)
 
     private var previewCard: some View {
-        Card(padding: 12) {
-            VStack(alignment: .leading, spacing: 8) {
+        Card(padding: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                // 头部：标题 + 状态
                 HStack {
                     Label(phaseLabel, systemImage: "sparkles.rectangle.stack")
                         .font(.system(size: 13, weight: .semibold))
@@ -233,98 +169,160 @@ struct CleanupScreen: View {
                         .buttonStyle(.borderless)
                     }
                 }
+                .padding(.horizontal, 12).padding(.vertical, 10)
 
-                if runner.lines.isEmpty && !runner.isRunning {
-                    Text(previewHint)
-                        .font(.system(size: 12)).foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
-                        .multilineTextAlignment(.center)
-                } else if showRawConsole {
-                    ConsoleOutputView(lines: runner.lines)
-                        .frame(minHeight: 220, maxHeight: 360)
-                } else if hasVisualContent {
-                    PreviewSummaryView(summary: parsed, loc: loc)
-                } else {
-                    // Output exists but parser found no structured entries
-                    // (e.g. installer "No installer files to clean"). Show the
-                    // raw lines in a compact form so the user still sees what
-                    // happened.
-                    ConsoleOutputView(lines: runner.lines)
-                        .frame(minHeight: 120, maxHeight: 240)
-                }
+                Divider()
+                contentArea
+
+                Divider()
+                actionBar
+                    .padding(.horizontal, 12).padding(.vertical, 10)
             }
         }
     }
 
-    // MARK: - Result banner (shown after run completes)
+    @ViewBuilder
+    private var contentArea: some View {
+        if phase == .idle {
+            Text(previewHint)
+                .font(.system(size: 12)).foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+                .multilineTextAlignment(.center)
+                .padding(12)
+        } else if phase == .previewing || phase == .running {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(phase == .previewing
+                     ? loc.t("正在扫描（试运行）…", "Scanning (dry-run)…")
+                     : loc.t("正在运行…", "Running…"))
+                    .font(.system(size: 12)).foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+            .padding(12)
+        } else if phase == .done {
+            doneContent
+        } else if phase == .error {
+            errorContent
+        } else {
+            // previewed
+            if showRawConsole {
+                ConsoleOutputView(lines: runner.lines)
+                    .frame(minHeight: 220, maxHeight: 360)
+                    .padding(12)
+            } else if hasVisualContent {
+                PreviewSummaryView(summary: parsed, loc: loc)
+                    .padding(12)
+            } else {
+                // Output exists but parser found no structured entries
+                // (e.g. installer "No installer files to clean"). Show the
+                // raw lines in a compact form so the user still sees what
+                // happened.
+                ConsoleOutputView(lines: runner.lines)
+                    .frame(minHeight: 120, maxHeight: 240)
+                    .padding(12)
+            }
+        }
+    }
 
-    private var resultBanner: some View {
+    private var doneContent: some View {
         let succeeded = runner.succeeded
         let cancelled = runner.wasCancelled
-        return Card(padding: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    Image(systemName: cancelled ? "stop.circle.fill" : (succeeded ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"))
-                        .font(.system(size: 22))
-                        .foregroundColor(Theme.color(for: cancelled ? .neutral : (succeeded ? .good : .critical)))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(cancelled
-                             ? loc.t("已取消", "Cancelled")
-                             : (succeeded
-                                ? loc.t("完成", "Finished")
-                                : loc.t("未完全成功", "Completed with errors")))
-                            .font(.system(size: 14, weight: .semibold))
-                        Text(resultSummaryText)
-                            .font(.system(size: 11)).foregroundColor(.secondary)
-                    }
-                    Spacer()
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: cancelled ? "stop.circle.fill" : (succeeded ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"))
+                    .font(.system(size: 22))
+                    .foregroundColor(Theme.color(for: cancelled ? .neutral : (succeeded ? .good : .critical)))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(cancelled
+                         ? loc.t("已取消", "Cancelled")
+                         : (succeeded
+                            ? loc.t("完成", "Finished")
+                            : loc.t("未完全成功", "Completed with errors")))
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(resultSummaryText)
+                        .font(.system(size: 11)).foregroundColor(.secondary)
                 }
-                if succeeded {
-                    HStack(spacing: 8) {
-                        Button {
-                            openTrash()
-                        } label: {
-                            Label(loc.t("打开废纸篓", "Open Trash"), systemImage: "trash")
-                        }
-                        .buttonStyle(.bordered)
-                        Button {
-                            resetToIdle()
-                        } label: {
-                            Label(loc.t("再清理一次", "Run Again"), systemImage: "arrow.clockwise")
-                        }
-                        .buttonStyle(.bordered)
-                    }
+                Spacer()
+            }
+        }
+        .padding(12)
+    }
+
+    private var errorContent: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 28)).foregroundColor(Theme.color(for: .critical))
+            Text(loc.t("扫描失败，请重试", "Scan failed, please retry"))
+                .font(.system(size: 12)).foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 120)
+        .padding(12)
+    }
+
+    // MARK: - Action bar (内嵌在扫描结果卡片底部，四个模块统一)
+
+    @ViewBuilder
+    private var actionBar: some View {
+        HStack {
+            switch phase {
+            case .idle:
+                Spacer()
+                Button {
+                    Task { await runPreview() }
+                } label: {
+                    Label(loc.t("开始扫描", "Start Scan"), systemImage: "magnifyingglass")
                 }
+                .buttonStyle(PrimaryButtonStyle())
+            case .previewing:
+                Spacer()
+                Button(loc.t("停止", "Stop"), role: .destructive) { runner.cancel() }
+                    .buttonStyle(.bordered)
+            case .previewed:
+                Button {
+                    resetToIdle()
+                } label: {
+                    Label(loc.t("重新扫描", "Rescan"), systemImage: "arrow.clockwise")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain).foregroundColor(.secondary)
+                Spacer()
+                Button {
+                    showConfirm = true
+                } label: {
+                    Label(actionLabel ?? loc.t("运行", "Run"), systemImage: systemImage)
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(PrimaryButtonStyle(disabled: !runner.hasOutput))
+                .disabled(!runner.hasOutput)
+            case .running:
+                Spacer()
+                Button(loc.t("停止", "Stop"), role: .destructive) { runner.cancel() }
+                    .buttonStyle(.bordered)
+            case .done:
+                if runner.succeeded {
+                    Button { openTrash() } label: {
+                        Label(loc.t("打开废纸篓", "Open Trash"), systemImage: "trash")
+                    }
+                    .buttonStyle(.bordered)
+                }
+                Spacer()
+                Button { resetToIdle() } label: {
+                    Label(loc.t("再清理一次", "Run Again"), systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            case .error:
+                Spacer()
+                Button {
+                    Task { await runPreview() }
+                } label: {
+                    Label(loc.t("重试扫描", "Retry scan"), systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(PrimaryButtonStyle())
             }
         }
     }
 
-    private var resultSummaryText: String {
-        if let snap = previewSnapshot {
-            let space = snap.totalSpaceText ?? "—"
-            let items = snap.totalItems ?? snap.entries.filter { $0.kind == .wouldClean }.count
-            return loc.t("本次可回收约 \(space) · \(items) 项已移至废纸篓，可从废纸篓恢复。",
-                         "Approximately \(space) reclaimable · \(items) items moved to Trash, recoverable from Trash.")
-        }
-        return loc.t("操作已完成，已移至废纸篓，可从废纸篓恢复。",
-                     "Operation complete. Items moved to Trash, recoverable from Trash.")
-    }
-
-    private func openTrash() {
-        let trashPath = NSString(string: "~/.Trash").expandingTildeInPath
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: trashPath)])
-    }
-
-    private var phaseLabel: String {
-        switch phase {
-        case .idle: return loc.t("扫描结果", "Scan Results")
-        case .previewing: return loc.t("扫描中（试运行）…", "Scanning (dry-run)…")
-        case .previewed: return loc.t("扫描完成", "Scan complete")
-        case .running: return loc.t("运行中…", "Running…")
-        case .done: return loc.t("已完成", "Finished")
-        case .error: return loc.t("扫描失败", "Scan failed")
-        }
-    }
+    // MARK: - Status pill
 
     @ViewBuilder
     private var statusPill: some View {
@@ -348,6 +346,33 @@ struct CleanupScreen: View {
                 .background(Theme.color(for: .critical).opacity(0.18), in: Capsule())
                 .foregroundColor(Theme.color(for: .critical))
         }
+    }
+
+    private var phaseLabel: String {
+        switch phase {
+        case .idle: return loc.t("扫描结果", "Scan Results")
+        case .previewing: return loc.t("扫描中（试运行）…", "Scanning (dry-run)…")
+        case .previewed: return loc.t("扫描完成", "Scan complete")
+        case .running: return loc.t("运行中…", "Running…")
+        case .done: return loc.t("已完成", "Finished")
+        case .error: return loc.t("扫描失败", "Scan failed")
+        }
+    }
+
+    private var resultSummaryText: String {
+        if let snap = previewSnapshot {
+            let space = snap.totalSpaceText ?? "—"
+            let items = snap.totalItems ?? snap.entries.filter { $0.kind == .wouldClean }.count
+            return loc.t("本次可回收约 \(space) · \(items) 项已移至废纸篓，可从废纸篓恢复。",
+                         "Approximately \(space) reclaimable · \(items) items moved to Trash, recoverable from Trash.")
+        }
+        return loc.t("操作已完成，已移至废纸篓，可从废纸篓恢复。",
+                     "Operation complete. Items moved to Trash, recoverable from Trash.")
+    }
+
+    private func openTrash() {
+        let trashPath = NSString(string: "~/.Trash").expandingTildeInPath
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: trashPath)])
     }
 
     @MainActor

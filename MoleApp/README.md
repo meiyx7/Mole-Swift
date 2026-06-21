@@ -37,6 +37,13 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 
 ## 版本记录 / Changelog
 
+### v1.6.4
+
+- 统一四个清理模块（清理/优化/清理项目/安装包）的按钮位置和交互设计
+- 所有操作按钮从 header 右上角移到扫描结果卡片底部操作栏，避免割裂感
+- 统一按钮文字：开始扫描 / 停止 / 重新扫描 / 运行·清理 / 打开废纸篓 / 再清理一次 / 重试扫描
+- 统一 previewCard 结构：头部（标题+状态）+ 内容区 + 底部操作栏
+
 ### v1.6.3
 
 - 隐藏「清理项目（本地扫描）」菜单项，只保留统一后的「清理项目」
