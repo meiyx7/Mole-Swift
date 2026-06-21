@@ -378,14 +378,12 @@ struct PurgeView: View {
         var errors: [String] = []
 
         for artifact in toDelete {
-            // Safety: verify path is within home directory
             let home = NSHomeDirectory()
             guard artifact.url.path.hasPrefix(home) else {
                 errors.append("\(artifact.displayName): outside home")
                 continue
             }
 
-            // Safety: verify it's a known artifact type
             guard PurgeScanner.artifactPatterns.contains(artifact.artifactType) else {
                 errors.append("\(artifact.displayName): unknown type")
                 continue
@@ -420,7 +418,6 @@ struct PurgeView: View {
             )
         }
 
-        // Remove deleted artifacts from list
         let failedIDs = Set(toDelete.filter { artifact in
             errors.contains { $0.hasPrefix(artifact.displayName) }
         }.map { $0.id })

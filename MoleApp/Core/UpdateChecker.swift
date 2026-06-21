@@ -35,7 +35,7 @@ final class UpdateChecker: ObservableObject {
         case downloading(progress: Double)  // 0.0 ... 1.0
         case extracting
         case replacing
-        case done
+        case done(version: String)  // The version that was just installed
         case error(String)
     }
 
@@ -137,12 +137,36 @@ final class UpdateChecker: ObservableObject {
             return
         }
 
-        // 5. Relaunch the new bundle and terminate this process.
-        installState = .done
+        // 5. Verify the new bundle is in place and report the version we
+        // just installed. This gives the user concrete confirmation that
+        // the update landed (rather than a silent exit), and catches the
+        // case where the replacement silently no-op'd.
+        let installedVersion = versionOfBundle(at: currentAppURL) ?? "?"
+        installState = .done(version: installedVersion)
+
+        // 6. Relaunch the new bundle via a detached helper script so the
+        // new process starts *after* this one exits. Launching directly
+        // with `open -n` while we're still alive can race with the OS
+        // releasing the old bundle's executable. The helper sleeps briefly,
+        // then opens the app, then deletes itself.
         relaunch(at: currentAppURL)
-        // Give the relaunch a moment before we exit.
-        try? await Task.sleep(nanoseconds: 300_000_000)
+
+        // Give the user time to see the "installed" confirmation before
+        // the app terminates. 1.5s is long enough to read the message but
+        // short enough not to feel stuck.
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
         exit(0)
+    }
+
+    /// Reads `CFBundleShortVersionString` from the Info.plist inside the
+    /// .app bundle at `url`. Returns nil if the bundle or key is missing.
+    private func versionOfBundle(at url: URL) -> String? {
+        let plist = url.appendingPathComponent("Contents/Info.plist")
+        guard let data = try? Data(contentsOf: plist),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+            return nil
+        }
+        return plist["CFBundleShortVersionString"] as? String
     }
 
     /// Cancels any in-flight download/install. Safe to call when idle.
@@ -368,11 +392,47 @@ final class UpdateChecker: ObservableObject {
 
     /// Launches the updated bundle at `url` and terminates this process.
     /// Uses `open` so the new instance gets a fresh launch context.
+    /// Relaunches the app at `url` after this process exits. We write a
+    /// small shell helper to a temp file and run it detached: the helper
+    /// waits for the current PID to disappear, then `open`s the app, then
+    /// deletes itself. This avoids the race where `open -n` launches the
+    /// new instance before the OS has fully released the old bundle's
+    /// executable, which on some macOS versions causes the relaunch to
+    /// silently fail or reopen the stale bundle.
     private func relaunch(at url: URL) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-n", url.path]
-        try? process.run()
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let helperURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mole-relaunch-\(UUID().uuidString).sh")
+        let script = """
+        #!/bin/bash
+        # Wait for the old Mole process to exit.
+        while kill -0 \(pid) 2>/dev/null; do sleep 0.1; done
+        # Small grace period for the OS to release file handles.
+        sleep 0.3
+        /usr/bin/open -n "\(url.path)"
+        # Self-destruct.
+        rm -f "$0"
+        """
+        do {
+            try script.write(to: helperURL, atomically: true, encoding: .utf8)
+            // Make executable.
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o755],
+                ofItemAtPath: helperURL.path
+            )
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+            process.arguments = [helperURL.path]
+            // Detach: don't let this process be a child that dies with us.
+            process.qualityOfService = .background
+            try? process.run()
+        } catch {
+            // Fallback: direct open, better than nothing.
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            process.arguments = ["-n", url.path]
+            try? process.run()
+        }
     }
 
     // MARK: - Version comparison
