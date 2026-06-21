@@ -110,7 +110,13 @@ enum SelectionSession {
         s.wantedSigs = Set(wanted.compactMap { s.items.indices.contains($0) ? sig(s.items[$0]) : nil })
         s.wantedNames = Set(wanted.compactMap { s.items.indices.contains($0) ? s.items[$0].name : nil })
         s.expectedCount = s.items.count
-        let keys = MoTUI.keystrokesToSelect(wanted, count: s.items.count, confirm: false)
+        // Mole TUI 默认全选非近期项（lib/clean/project.sh:685-693），
+        // 所以不能直接用 keystrokesToSelect（它假设初始全不选）。
+        // 先发 'A'（全选）再发 'I'（反选）= 全不选，然后勾选用户选的。
+        // A→I 而非直接 I：I 依赖当前状态，A 先把状态归一化为全选，
+        // I 反选后确定是全不选，不受近期项默认未选影响。
+        let clearAll: [UInt8] = [0x41, 0x49]   // 'A' 'I'
+        let keys = clearAll + MoTUI.keystrokesToSelect(wanted, count: s.items.count, confirm: false)
         if s.items.count > s.viewportCount {
             // 选择跨越多个视口。一帧无法显示全部，滚动整个列表并按身份
             // 校验勾选行。先把光标回顶，校验走查从上往下读。

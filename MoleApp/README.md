@@ -37,6 +37,12 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 
 ## 版本记录 / Changelog
 
+### v1.6.2
+
+- 修复 CLI 交互模式执行清理时报「无法安全确认选择（13/1 已切换）」的问题
+- 根因：Mole TUI 默认全选非近期项（lib/clean/project.sh:685-693），而 keystrokesToSelect 假设初始全不选，导致按 Space 反而取消了用户想要的项
+- 修复：confirm 时先发 'A'（全选）再发 'I'（反选）把状态归一化为全不选，再勾选用户选的项
+
 ### v1.6.1
 
 - 修复两种 purge 模式扫描结果出现重复记录的问题
