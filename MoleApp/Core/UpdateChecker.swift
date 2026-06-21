@@ -400,7 +400,10 @@ final class UpdateChecker: ObservableObject {
     /// executable, which on some macOS versions causes the relaunch to
     /// silently fail or reopen the stale bundle.
     private func relaunch(at url: URL) {
-        let pid = ProcessInfo.processInfo.processIdentifier
+        // getpid() is POSIX, available via Foundation on macOS. We avoid
+        // ProcessInfo.processInfo here because under @MainActor isolation
+        // + certain SDK versions the static accessor resolves incorrectly.
+        let pid = getpid()
         let helperURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("mole-relaunch-\(UUID().uuidString).sh")
         let script = """
@@ -414,7 +417,7 @@ final class UpdateChecker: ObservableObject {
         rm -f "$0"
         """
         do {
-            try script.write(to: helperURL, atomically: true, encoding: .utf8)
+            try script.write(to: helperURL, atomically: true, encoding: String.Encoding.utf8)
             // Make executable.
             try? FileManager.default.setAttributes(
                 [.posixPermissions: 0o755],

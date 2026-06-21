@@ -218,10 +218,9 @@ struct PurgeView: View {
                         .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
                     Spacer()
                     if !selectedIDs.isEmpty {
-                        Text(loc.t("可回收 \(ByteFormatter.bytes(totalSelectedSize))", "Reclaim \(ByteFormatter.bytes(totalSelectedSize))")
+                        Text(loc.t("可回收 \(ByteFormatter.bytes(totalSelectedSize))", "Reclaim \(ByteFormatter.bytes(totalSelectedSize))"))
                             .font(.system(size: 11, weight: .semibold, design: .rounded))
                             .foregroundColor(Theme.color(for: .good))
-                        )
                     }
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)

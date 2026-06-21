@@ -37,6 +37,11 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 
 ## 版本记录 / Changelog
 
+### v1.5.8
+
+- 修复 v1.5.7 构建失败：UpdateChecker 的 relaunch 用 `getpid()` 替代 `ProcessInfo.processInfo`（后者在 @MainActor 隔离下解析异常）
+- 修复 PurgeView 可回收空间文案缺少右括号导致的编译错误
+
 ### v1.5.7
 
 - 修复应用内更新后版本号仍显示旧值的问题：Info.plist 的版本字段改用 `$(MARKETING_VERSION)` / `$(CURRENT_PROJECT_VERSION)` 占位符，由 Xcode 构建时注入，不再硬编码
