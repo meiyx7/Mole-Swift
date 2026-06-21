@@ -9,34 +9,38 @@ final class StatusViewModel: ObservableObject {
     @Published var error: String?
     @Published var isLive = false
     /// User-selected refresh interval in seconds. Persisted across launches
-    /// via UserDefaults so the choice sticks. Defaults to 5s (the previous
-    /// hard-coded value) to preserve existing behaviour.
+    /// via UserDefaults so the choice sticks. Defaults to 1s now that fast
+    /// metrics are collected natively (< 2ms per tick).
     @Published var refreshInterval: TimeInterval = {
         let stored = UserDefaults.standard.double(forKey: "statusRefreshInterval")
-        return stored > 0 ? stored : 5.0
+        return stored > 0 ? stored : 1.0
     }()
 
     /// Available refresh interval choices exposed in the UI.
-    static let intervalChoices: [TimeInterval] = [3, 5, 10, 30]
+    /// 1s is now viable because native collection is near-zero cost.
+    static let intervalChoices: [TimeInterval] = [1, 3, 5, 10]
 
     private var refreshTask: Task<Void, Never>?
     private weak var liveService: MoleService?
-    /// Guards against overlapping refreshes: if the previous snapshot
-    /// request hasn't finished (e.g. CLI hung), skip the next tick instead
-    /// of piling up concurrent `mo status` processes.
     private var isRefreshing = false
-    /// Whether the app window is currently visible (key window or at least
-    /// on screen). When false, the live refresh loop pauses to avoid
-    /// burning CPU on background `mo status` calls.
     private var windowVisible = true
+    private let collector = FastMetricsCollector()
 
+    /// Initial load: fetches slow metrics (CLI) then overlays native fast metrics.
     func load(service: MoleService) async {
         isLoading = true
         error = nil
-        do {
-            snapshot = try await service.statusSnapshot()
-        } catch {
-            self.error = error.localizedDescription
+        FastMetricsCollector.sharedService = service
+        await collector.forceRefreshSlow()
+        if let snap = await collector.collectFast() {
+            snapshot = snap
+        } else {
+            // Fallback: try direct CLI call
+            do {
+                snapshot = try await service.statusSnapshot()
+            } catch {
+                self.error = error.localizedDescription
+            }
         }
         isLoading = false
     }
@@ -45,11 +49,10 @@ final class StatusViewModel: ObservableObject {
         guard !isLive else { return }
         isLive = true
         liveService = service
+        FastMetricsCollector.sharedService = service
         startRefreshLoop()
     }
 
-    /// Updates the refresh interval and persists it. If live mode is on,
-    /// the loop restarts with the new interval.
     func setRefreshInterval(_ interval: TimeInterval, service: MoleService) {
         refreshInterval = interval
         UserDefaults.standard.set(interval, forKey: "statusRefreshInterval")
@@ -58,20 +61,13 @@ final class StatusViewModel: ObservableObject {
         }
     }
 
-    /// Called by window visibility observers. When the window becomes
-    /// hidden, the live loop pauses; when it returns, the loop resumes
-    /// (and triggers an immediate refresh so stale data doesn't linger).
     func setWindowVisible(_ visible: Bool, service: MoleService) {
         windowVisible = visible
         guard isLive else { return }
         if visible {
-            // Resume: kick an immediate refresh and restart the loop.
             Task { await load(service: service) }
             startRefreshLoop()
         } else {
-            // Pause: cancel the pending sleep but keep isLive true so
-            // resuming works. The loop's next iteration checks
-            // windowVisible and exits.
             refreshTask?.cancel()
             refreshTask = nil
         }
@@ -82,15 +78,20 @@ final class StatusViewModel: ObservableObject {
         refreshTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self, !Task.isCancelled, self.isLive else { return }
-                // Pause when the window is not visible to save resources.
                 guard self.windowVisible else { return }
                 try? await Task.sleep(nanoseconds: UInt64(self.refreshInterval * 1_000_000_000))
                 guard !Task.isCancelled, self.isLive, self.windowVisible else { return }
-                // Skip if a previous refresh is still in flight.
                 guard !self.isRefreshing else { continue }
-                guard let svc = self.liveService else { return }
                 self.isRefreshing = true
-                await self.load(service: svc)
+
+                // Fast path: native metrics (< 2ms), always available
+                if let fast = await self.collector.collectFast() {
+                    self.snapshot = fast
+                }
+
+                // Slow path: trigger CLI refresh if interval elapsed (30s)
+                Task { await self.collector.refreshSlowIfNeeded() }
+
                 self.isRefreshing = false
             }
         }
