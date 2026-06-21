@@ -502,13 +502,13 @@ struct StatusView: View {
                     let txData = (0..<maxCount).map { NetPoint(id: "tx\($0)", t: $0, v: $0 < history.txHistory.count ? history.txHistory[$0] : 0) }
                     Chart {
                         ForEach(rxData) { p in
-                            LineMark(x: .value("t", p.t), y: .value("下载 Mbps", p.v))
-                                .foregroundStyle(by: .value("type", "下载"))
+                            LineMark(x: .value("t", p.t), y: .value("下载", p.v))
+                                .foregroundStyle(.green)
                                 .interpolationMethod(.catmullRom)
                         }
                         ForEach(txData) { p in
-                            LineMark(x: .value("t", p.t), y: .value("上传 Mbps", p.v))
-                                .foregroundStyle(by: .value("type", "上传"))
+                            LineMark(x: .value("t", p.t), y: .value("上传", p.v))
+                                .foregroundStyle(.orange)
                                 .interpolationMethod(.catmullRom)
                         }
                     }

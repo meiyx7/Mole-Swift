@@ -163,7 +163,9 @@ enum NativeMetrics {
                             &hostname, socklen_t(hostname.count),
                             nil, 0, NI_NUMERICHOST)
                 let ip = String(cString: hostname)
-                if ip != "0.0.0.0" && ip != "127.0.0.1" {
+                if ip != "0.0.0.0" && ip != "127.0.0.1"
+                    && !name.hasPrefix("utun") && !name.hasPrefix("awdl")
+                    && !name.hasPrefix("llw") && !name.hasPrefix("gif") {
                     activeIPs[name] = ip
                 }
             }

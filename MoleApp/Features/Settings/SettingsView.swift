@@ -1,15 +1,11 @@
 import SwiftUI
-import LocalAuthentication
 
 struct SettingsView: View {
     @EnvironmentObject private var service: MoleService
     @EnvironmentObject private var loc: Localization
     @EnvironmentObject private var updater: UpdateChecker
     @State private var version = ""
-    @State private var touchidStatus = ""
-    @State private var touchidSupported = false
     @StateObject private var runner = CommandRunner()
-    @StateObject private var touchidRunner = CommandRunner()
     @State private var helpText = ""
     @State private var showHelp = false
     @State private var userInitiatedCheck = false
@@ -40,16 +36,6 @@ struct SettingsView: View {
         return vp.patch >= mp.patch
     }
 
-    /// Checks whether this Mac has Touch ID hardware available.
-    private static func checkTouchIDSupport() -> Bool {
-        let context = LAContext()
-        var error: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
-            return false
-        }
-        return context.biometryType == .touchID
-    }
-
     var body: some View {
         if !service.isInstalled {
             CLIUnavailableView()
@@ -57,12 +43,9 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header
-                    // High-frequency / interactive sections first.
                     languageCard
                     updateCard
-                    if touchidSupported { touchidCard }
                     if runner.hasOutput || runner.isRunning || runner.exitCode != nil || runner.error != nil { consoleCard }
-                    // About section last (reference info, low interaction).
                     aboutCard
                 }
             }
@@ -70,8 +53,6 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .task {
                 version = await service.version()
-                touchidStatus = await service.touchidStatus()
-                touchidSupported = Self.checkTouchIDSupport()
             }
             .onReceive(NotificationCenter.default.publisher(for: .moleCheckUpdates)) { _ in
                 Task { await updater.checkForUpdates() }
@@ -79,7 +60,6 @@ struct SettingsView: View {
             .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
                 Task {
                     version = await service.version()
-                    touchidStatus = await service.touchidStatus()
                 }
             }
             .onChange(of: updater.state) { newState in
@@ -97,7 +77,7 @@ struct SettingsView: View {
     private var header: some View {
         FeatureHeader(
             title: loc.t("设置", "Settings"),
-            subtitle: loc.t("配置 Touch ID 与更新。", "Configure Touch ID and updates."),
+            subtitle: loc.t("配置语言与更新。", "Configure language and updates."),
             systemImage: "gearshape"
         )
     }
@@ -192,62 +172,6 @@ struct SettingsView: View {
                     }
                     .frame(maxHeight: 220)
                     .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-                }
-            }
-        }
-    }
-
-    private var touchidCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Label(loc.t("用于 sudo 的 Touch ID", "Touch ID for sudo"), systemImage: "touchid")
-                        .font(.system(size: 13, weight: .semibold))
-                    Spacer()
-                    if !touchidStatus.isEmpty {
-                        Text(touchidStatus)
-                            .font(.system(size: 10, weight: .semibold))
-                            .padding(.horizontal, 7).padding(.vertical, 2)
-                            .background(touchidStatus.lowercased().contains("enabl") ? Color.green.opacity(0.18) : Color.gray.opacity(0.18),
-                                        in: Capsule())
-                            .foregroundColor(touchidStatus.lowercased().contains("enabl") ? .green : .secondary)
-                    }
-                }
-                Text(loc.t(
-                    "使用 Touch ID 进行 sudo 命令验证，无需输入密码。",
-                    "Authenticate sudo commands with Touch ID instead of typing your password."
-                ))
-                .font(.system(size: 11)).foregroundColor(.secondary)
-                HStack(spacing: 8) {
-                    Button {
-                        Task {
-                            await touchidRunner.run { onLine in
-                                try await service.touchidEnable(onLine: onLine)
-                            }
-                            touchidStatus = await service.touchidStatus()
-                        }
-                    } label: { Label(loc.t("启用", "Enable"), systemImage: "checkmark.circle") }
-                        .buttonStyle(PrimaryButtonStyle())
-                        .disabled(touchidRunner.isRunning)
-
-                    Button {
-                        Task {
-                            await touchidRunner.run { onLine in
-                                try await service.touchidDisable(onLine: onLine)
-                            }
-                            touchidStatus = await service.touchidStatus()
-                        }
-                    } label: { Label(loc.t("禁用", "Disable"), systemImage: "xmark.circle") }
-                        .buttonStyle(.bordered)
-                        .disabled(touchidRunner.isRunning)
-
-                    Spacer()
-                    Button { Task { touchidStatus = await service.touchidStatus() } } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }.buttonStyle(.borderless)
-                }
-                if touchidRunner.hasOutput {
-                    ConsoleOutputView(lines: touchidRunner.lines).frame(minHeight: 80, maxHeight: 140)
                 }
             }
         }
