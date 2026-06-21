@@ -10,6 +10,11 @@ final class FastMetricsCollector {
     private var lastSlowRefresh: Date = .distantPast
     private var isRefreshingSlow = false
 
+    /// Ring buffer for network history (last 60 data points = 60s at 1s interval).
+    private var rxHistory: [Double] = []
+    private var txHistory: [Double] = []
+    private let maxHistoryPoints = 60
+
     /// Interval between slow (CLI) refreshes.
     let slowInterval: TimeInterval = 30
 
@@ -18,7 +23,6 @@ final class FastMetricsCollector {
     /// Collects a fast snapshot by overlaying native metrics onto the latest
     /// slow snapshot. If no slow snapshot exists yet, triggers one.
     func collectFast() async -> StatusSnapshot? {
-        // Ensure we have a base slow snapshot
         if slowSnapshot == nil {
             await refreshSlow()
         }
@@ -44,25 +48,54 @@ final class FastMetricsCollector {
         base.memory.swapTotal = Double(mem.swapTotalBytes)
 
         let disk = NativeMetrics.readDiskUsage()
-        if var rootDisk = base.disks.first(where: { $0.mount == "/" }) {
+        if let idx = base.disks.firstIndex(where: { $0.mount == "/" }) {
+            var rootDisk = base.disks[idx]
             rootDisk.total = Double(disk.totalBytes)
             rootDisk.used = Double(disk.usedBytes)
             rootDisk.usedPercent = disk.totalBytes > 0
                 ? Double(disk.usedBytes) / Double(disk.totalBytes) * 100.0 : 0
-            if let idx = base.disks.firstIndex(where: { $0.mount == "/" }) {
-                base.disks[idx] = rootDisk
-            }
+            base.disks[idx] = rootDisk
         }
 
+        // Network: native rates + accumulate history
         let netRate = NativeMetrics.readNetworkRate()
         let interfaces = NativeMetrics.listInterfaces()
-        for (i, iface) in interfaces.enumerated() {
-            if i < base.network.count {
-                base.network[i].rxRateMBs = netRate.rxBytesPerSec / 1_048_576.0
-                base.network[i].txRateMBs = netRate.txBytesPerSec / 1_048_576.0
-                base.network[i].ip = iface.ip
+
+        // Build updated network list with native rates
+        var updatedNetworks: [NetworkStatus] = []
+        for iface in interfaces {
+            var found = false
+            for var n in base.network where n.name == iface.name {
+                n.rxRateMBs = netRate.rxBytesPerSec / 1_048_576.0
+                n.txRateMBs = netRate.txBytesPerSec / 1_048_576.0
+                n.ip = iface.ip
+                updatedNetworks.append(n)
+                found = true
+                break
+            }
+            if !found {
+                updatedNetworks.append(NetworkStatus(
+                    name: iface.name,
+                    rxRateMBs: netRate.rxBytesPerSec / 1_048_576.0,
+                    txRateMBs: netRate.txBytesPerSec / 1_048_576.0,
+                    ip: iface.ip
+                ))
             }
         }
+        if !updatedNetworks.isEmpty {
+            base.network = updatedNetworks
+        }
+
+        // Accumulate network history (total rx/tx across all interfaces)
+        let totalRx = updatedNetworks.reduce(0) { $0 + $1.rxRateMBs }
+        let totalTx = updatedNetworks.reduce(0) { $0 + $1.txRateMBs }
+        rxHistory.append(totalRx)
+        txHistory.append(totalTx)
+        if rxHistory.count > maxHistoryPoints {
+            rxHistory.removeFirst()
+            txHistory.removeFirst()
+        }
+        base.networkHistory = NetworkHistory(rxHistory: rxHistory, txHistory: txHistory)
 
         base.collectedAt = Date()
         return base
@@ -88,7 +121,7 @@ final class FastMetricsCollector {
         isRefreshingSlow = true
         defer { isRefreshingSlow = false }
 
-        guard let service = await findService() else { return }
+        guard let service = FastMetricsCollector.sharedService else { return }
         do {
             let snap = try await service.statusSnapshot()
             slowSnapshot = snap
@@ -96,12 +129,6 @@ final class FastMetricsCollector {
         } catch {
             // Keep the last slow snapshot on error
         }
-    }
-
-    private func findService() async -> MoleService? {
-        // Access the shared environment object via the app's service reference.
-        // This is injected at initialization time.
-        return FastMetricsCollector.sharedService
     }
 
     nonisolated(unsafe) static var sharedService: MoleService?

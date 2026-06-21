@@ -8,17 +8,9 @@ final class StatusViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     @Published var isLive = false
-    /// User-selected refresh interval in seconds. Persisted across launches
-    /// via UserDefaults so the choice sticks. Defaults to 1s now that fast
-    /// metrics are collected natively (< 2ms per tick).
-    @Published var refreshInterval: TimeInterval = {
-        let stored = UserDefaults.standard.double(forKey: "statusRefreshInterval")
-        return stored > 0 ? stored : 1.0
-    }()
 
-    /// Available refresh interval choices exposed in the UI.
-    /// 1s is now viable because native collection is near-zero cost.
-    static let intervalChoices: [TimeInterval] = [1, 3, 5, 10]
+    /// Fixed 1s refresh interval for native metrics (near-zero cost).
+    private let refreshInterval: TimeInterval = 1.0
 
     private var refreshTask: Task<Void, Never>?
     private weak var liveService: MoleService?
@@ -26,7 +18,6 @@ final class StatusViewModel: ObservableObject {
     private var windowVisible = true
     private let collector = FastMetricsCollector()
 
-    /// Initial load: fetches slow metrics (CLI) then overlays native fast metrics.
     func load(service: MoleService) async {
         isLoading = true
         error = nil
@@ -35,7 +26,6 @@ final class StatusViewModel: ObservableObject {
         if let snap = await collector.collectFast() {
             snapshot = snap
         } else {
-            // Fallback: try direct CLI call
             do {
                 snapshot = try await service.statusSnapshot()
             } catch {
@@ -51,14 +41,6 @@ final class StatusViewModel: ObservableObject {
         liveService = service
         FastMetricsCollector.sharedService = service
         startRefreshLoop()
-    }
-
-    func setRefreshInterval(_ interval: TimeInterval, service: MoleService) {
-        refreshInterval = interval
-        UserDefaults.standard.set(interval, forKey: "statusRefreshInterval")
-        if isLive {
-            startRefreshLoop()
-        }
     }
 
     func setWindowVisible(_ visible: Bool, service: MoleService) {
@@ -84,12 +66,10 @@ final class StatusViewModel: ObservableObject {
                 guard !self.isRefreshing else { continue }
                 self.isRefreshing = true
 
-                // Fast path: native metrics (< 2ms), always available
                 if let fast = await self.collector.collectFast() {
                     self.snapshot = fast
                 }
 
-                // Slow path: trigger CLI refresh if interval elapsed (30s)
                 Task { await self.collector.refreshSlowIfNeeded() }
 
                 self.isRefreshing = false
@@ -138,33 +118,16 @@ struct StatusView: View {
                     get: { vm.isLive },
                     set: { $0 ? vm.startLive(service: service) : vm.stopLive() }
                 )) {
-                    Label(vm.isLive ? loc.t("实时", "Live") : loc.t("已暂停", "Paused"), systemImage: vm.isLive ? "pause.fill" : "play.fill")
+                    Label(vm.isLive ? loc.t("实时", "Live") : loc.t("已暂停", "Paused"),
+                          systemImage: vm.isLive ? "pause.fill" : "play.fill")
                 }
-                .help(loc.t("切换实时刷新", "Toggle live refresh"))
-            }
-            // Refresh interval picker, only relevant when live mode is on.
-            if vm.isLive {
-                ToolbarItem(placement: .primaryAction) {
-                    Picker(loc.t("刷新间隔", "Refresh interval"), selection: Binding(
-                        get: { vm.refreshInterval },
-                        set: { vm.setRefreshInterval($0, service: service) }
-                    )) {
-                        ForEach(StatusViewModel.intervalChoices, id: \.self) { interval in
-                            Text("\(Int(interval))s").tag(interval)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .help(loc.t("选择实时刷新间隔", "Choose live refresh interval"))
-                }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button { Task { await vm.load(service: service) } } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .help(loc.t("立即刷新", "Refresh now"))
+                .help(loc.t("暂停/恢复实时刷新", "Pause/resume live refresh"))
             }
         }
-        .task { await vm.load(service: service) }
+        .task {
+            await vm.load(service: service)
+            vm.startLive(service: service)
+        }
         .onDisappear { vm.stopLive() }
         .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
             Task { await vm.load(service: service) }
