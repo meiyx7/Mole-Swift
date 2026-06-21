@@ -346,6 +346,7 @@ struct SettingsView: View {
         }
     }
 
+
     /// Download / install / cancel controls shown when an update is available.
     @ViewBuilder
     private func installControls(version: String) -> some View {
@@ -403,10 +404,10 @@ struct SettingsView: View {
                         .font(.system(size: 12)).foregroundColor(.secondary)
                 }
                 .padding(.vertical, 4)
-            case .done:
+            case .done(let version):
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-                    Text(loc.t("安装完成，正在重启…", "Installed, relaunching…"))
+                    Text(loc.t("已安装 \(version)，正在重启…", "Installed \(version), relaunching…"))
                         .font(.system(size: 12)).foregroundColor(.secondary)
                 }
                 .padding(.vertical, 4)

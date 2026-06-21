@@ -37,6 +37,12 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 
 ## 版本记录 / Changelog
 
+### v1.5.7
+
+- 修复应用内更新后版本号仍显示旧值的问题：Info.plist 的版本字段改用 `$(MARKETING_VERSION)` / `$(CURRENT_PROJECT_VERSION)` 占位符，由 Xcode 构建时注入，不再硬编码
+- 更新完成后显示实际安装的版本号（如"已安装 1.5.7，正在重启…"），让用户明确确认更新成功
+- 重启逻辑改用 detached helper 脚本：等待旧进程退出后再启动新 app，避免 `open -n` 与旧 bundle 释放的竞态导致重启失败或打开残留
+
 ### v1.5.6
 
 - 应用内自动更新：检查到新版本后可直接下载、解压、替换并重启，无需再打开浏览器手动下载；特权安装位置会弹出系统密码授权
