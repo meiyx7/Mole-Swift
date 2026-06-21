@@ -12,6 +12,38 @@ struct PreviewSummaryView: View {
     let summary: PreviewParser.Summary
     var loc: Localization
 
+    /// Maps English CLI section names to localized display names and descriptions.
+    private static let sectionInfo: [(en: String, zh: String, desc: String)] = [
+        ("System",                  "系统清理",     "系统缓存、日志和诊断报告"),
+        ("User essentials",         "用户基础缓存", "用户运行时文件和 Finder 元数据"),
+        ("App caches",              "应用缓存",     "各应用的缓存与支持文件"),
+        ("Browsers",                "浏览器",       "浏览器缓存、Cookie 和历史记录"),
+        ("Cloud & Office",          "云与办公",     "iCloud、Office、Slack 等缓存"),
+        ("Developer tools",         "开发工具",     "Xcode、npm、Docker 等开发缓存"),
+        ("Applications",            "应用程序",     "已安装应用的缓存文件"),
+        ("Virtualization",          "虚拟化",       "Docker、虚拟机磁盘和容器镜像"),
+        ("Application Support",     "应用支持文件", "应用支持目录中的可重建数据"),
+        ("App leftovers",           "应用残留",     "已卸载应用的残留文件"),
+        ("Device backups & firmware", "设备备份与固件", "iOS 设备备份和固件缓存"),
+        ("Time Machine",            "时间机器",     "Time Machine 备份快照"),
+        ("Large files",             "大文件",       "长期未用的大文件"),
+        ("System Data clues",       "系统数据",     "系统数据占用来源分析"),
+        ("Project artifacts",       "项目产物",     "node_modules 等项目构建产物"),
+        ("External volume",         "外部卷",       "外接磁盘上的缓存和垃圾文件"),
+    ]
+
+    private static let sectionLookup: [String: (zh: String, desc: String)] = {
+        Dictionary(uniqueKeysWithValues: sectionInfo.map { ($0.en, ($0.zh, $0.desc)) })
+    }()
+
+    static func sectionDisplayName(_ name: String) -> String {
+        sectionLookup[name]?.zh ?? name
+    }
+
+    static func sectionDescription(_ name: String) -> String? {
+        sectionLookup[name]?.desc
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             statRow
@@ -70,12 +102,19 @@ struct PreviewSummaryView: View {
         let cleanable = entries.filter { $0.kind == .wouldClean }
         let sectionSize = aggregateSize(of: cleanable)
         let hasCleanable = !cleanable.isEmpty
+        let displayName = Self.sectionDisplayName(name)
+        let description = Self.sectionDescription(name)
         return Card(padding: 12) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Image(systemName: hasCleanable ? "sparkles" : "checkmark.seal")
                         .foregroundColor(hasCleanable ? Theme.accent : .secondary)
-                    Text(name).font(.system(size: 13, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(displayName).font(.system(size: 13, weight: .semibold))
+                        if let description {
+                            Text(description).font(.system(size: 10)).foregroundColor(.secondary)
+                        }
+                    }
                     Spacer()
                     if hasCleanable, let size = sectionSize {
                         Text(size).font(.system(size: 11, weight: .semibold, design: .rounded))
