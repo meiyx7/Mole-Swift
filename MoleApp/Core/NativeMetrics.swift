@@ -146,45 +146,47 @@ enum NativeMetrics {
     private static var lastNetTime: Date = .distantPast
 
     /// Reads per-interface network byte counters via getifaddrs and computes rate since last call.
+    /// Only returns interfaces that have an IPv4 address (filters out inactive/virtual).
     static func readInterfaceRates() -> [InterfaceRate] {
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return [] }
         defer { freeifaddrs(ifaddr) }
 
-        // First pass: collect current byte counters per interface
-        var currentBytes: [String: (rx: UInt64, tx: UInt64)] = [:]
-        var ifaceOrder: [String] = []
-
+        // Collect IPs first to identify active interfaces
+        var activeIPs: [String: String] = [:]
         var ptr = first
         while true {
-            if let addr = ptr.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_LINK) {
-                let name = String(cString: ptr.pointee.ifa_name)
-                // Only physical interfaces: en0 (WiFi), en1 (Ethernet), etc.
-                if name.hasPrefix("en") {
-                    let data = UnsafeRawPointer(ptr.pointee.ifa_data).bindMemory(to: if_data.self, capacity: 1)
-                    let rx = UInt64(data.pointee.ifi_ibytes)
-                    let tx = UInt64(data.pointee.ifi_obytes)
-                    currentBytes[name] = (rx, tx)
-                    if !ifaceOrder.contains(name) { ifaceOrder.append(name) }
+            let name = String(cString: ptr.pointee.ifa_name)
+            if let addr = ptr.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET) {
+                var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                getnameinfo(addr, socklen_t(addr.pointee.sa_len),
+                            &hostname, socklen_t(hostname.count),
+                            nil, 0, NI_NUMERICHOST)
+                let ip = String(cString: hostname)
+                if ip != "0.0.0.0" && ip != "127.0.0.1" {
+                    activeIPs[name] = ip
                 }
             }
             guard let next = ptr.pointee.ifa_next else { break }
             ptr = next
         }
 
-        // Second pass: collect IPs
-        var ifaceIPs: [String: String] = [:]
+        // Collect byte counters only for active interfaces with IPs
+        var currentBytes: [String: (rx: UInt64, tx: UInt64)] = [:]
+        var ifaceOrder: [String] = []
+
         ptr = first
         while true {
-            let name = String(cString: ptr.pointee.ifa_name)
-            if let addr = ptr.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET),
-               currentBytes.keys.contains(name) {
-                var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                getnameinfo(addr, socklen_t(addr.pointee.sa_len),
-                            &hostname, socklen_t(hostname.count),
-                            nil, 0, NI_NUMERICHOST)
-                let ip = String(cString: hostname)
-                if ip != "0.0.0.0" { ifaceIPs[name] = ip }
+            if let addr = ptr.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_LINK) {
+                let name = String(cString: ptr.pointee.ifa_name)
+                // Only interfaces that have an IP (active, physical)
+                if let ip = activeIPs[name] {
+                    let data = UnsafeRawPointer(ptr.pointee.ifa_data).bindMemory(to: if_data.self, capacity: 1)
+                    currentBytes[name] = (UInt64(data.pointee.ifi_ibytes), UInt64(data.pointee.ifi_obytes))
+                    if !ifaceOrder.contains(name) { ifaceOrder.append(name) }
+                    // Inject IP into activeIPs for result building
+                    activeIPs[name] = ip
+                }
             }
             guard let next = ptr.pointee.ifa_next else { break }
             ptr = next
@@ -196,7 +198,7 @@ enum NativeMetrics {
 
         for name in ifaceOrder {
             guard let cur = currentBytes[name] else { continue }
-            let ip = ifaceIPs[name] ?? ""
+            let ip = activeIPs[name] ?? ""
             var rxRate: Double = 0
             var txRate: Double = 0
 
