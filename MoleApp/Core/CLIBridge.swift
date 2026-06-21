@@ -133,22 +133,32 @@ enum CLIBridge {
     }()
 
     /// Runs a command, collecting stdout and stderr into strings.
+    /// Cancellation is honoured: if the surrounding `Task` is cancelled,
+    /// the process is terminated and `CancellationError` is thrown. This
+    /// matters for `analyze` JSON runs that can take up to 5 minutes —
+    /// without cancellation the user's "back" / "stop" button has no
+    /// effect until the CLI times out.
     static func run(_ args: [String], options: CLIOptions = CLIOptions()) async throws -> CLIResult {
         guard let binary = CLILocator.resolve() else { throw CLIBridgeError.binaryMissing }
-        do {
-            return try await withCheckedThrowingContinuation { continuation in
+        let taskID = UUID()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
                 DispatchQueue.global(qos: .userInitiated).async {
                     do {
-                        let result = try capture(binary: binary, args: args, options: options)
+                        let result = try capture(binary: binary, args: args, options: options, taskID: taskID)
                         continuation.resume(returning: result)
                     } catch {
                         continuation.resume(throwing: error)
                     }
                 }
             }
-        } catch let error as CLIBridgeError {
-            DebugLog.logExecutionFailure(args: args, error: error)
-            throw error
+        } onCancel: {
+            // Terminate the process so capture() returns promptly. The
+            // continuation is resumed by capture() itself with whatever
+            // partial result it has; if the process was killed before any
+            // output was read, the result will have a non-zero exit code
+            // and the caller surfaces that as an error.
+            terminateStreaming(taskID: taskID)
         }
     }
 
@@ -275,7 +285,7 @@ enum CLIBridge {
         process?.terminate()
     }
 
-    private static func capture(binary: String, args: [String], options: CLIOptions) throws -> CLIResult {
+    private static func capture(binary: String, args: [String], options: CLIOptions, taskID: UUID? = nil) throws -> CLIResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = args
@@ -312,6 +322,12 @@ enum CLIBridge {
             errPipe.fileHandleForReading.readabilityHandler = nil
             throw CLIBridgeError.executionFailed("\(error)")
         }
+        // Register after successful launch so cancellation can terminate it.
+        // Only register when a taskID was provided (i.e. the run() path that
+        // opts into cancellation); legacy direct callers of capture() pass nil.
+        if let taskID {
+            registerStreaming(taskID: taskID, process: process)
+        }
 
         // Handle timeout if specified
         if let timeout = options.timeout {
@@ -335,6 +351,10 @@ enum CLIBridge {
         errPipe.fileHandleForReading.readabilityHandler = nil
         outSemaphore.signal()
         errSemaphore.signal()
+
+        if let taskID {
+            unregisterStreaming(taskID: taskID)
+        }
 
         let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
         let stderr = String(data: stderrData, encoding: .utf8) ?? ""
