@@ -197,35 +197,34 @@ private struct SectionCard: View {
     var body: some View {
         Card(padding: 12) {
             VStack(alignment: .leading, spacing: 0) {
-                Button {
+                HStack(spacing: 8) {
+                    Image(systemName: cleanable.isEmpty ? "checkmark.seal" : "sparkles")
+                        .foregroundColor(cleanable.isEmpty ? .secondary : Theme.accent)
+                        .frame(width: 16)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(displayName).font(.system(size: 13, weight: .semibold))
+                        Text(summaryText)
+                            .font(.system(size: 10))
+                            .foregroundColor(cleanable.isEmpty ? .secondary : Theme.color(for: .good))
+                    }
+                    Spacer()
+                    if let size = sectionSize, !cleanable.isEmpty {
+                        Text(size)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(Theme.color(for: .good))
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Theme.color(for: .good).opacity(0.16), in: Capsule())
+                    }
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         expanded.toggle()
                     }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: cleanable.isEmpty ? "checkmark.seal" : "sparkles")
-                            .foregroundColor(cleanable.isEmpty ? .secondary : Theme.accent)
-                            .frame(width: 16)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(displayName).font(.system(size: 13, weight: .semibold))
-                            Text(summaryText)
-                                .font(.system(size: 10))
-                                .foregroundColor(cleanable.isEmpty ? .secondary : Theme.color(for: .good))
-                        }
-                        Spacer()
-                        if let size = sectionSize, !cleanable.isEmpty {
-                            Text(size)
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                .foregroundColor(Theme.color(for: .good))
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(Theme.color(for: .good).opacity(0.16), in: Capsule())
-                        }
-                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.secondary)
-                    }
                 }
-                .buttonStyle(.plain)
 
                 if expanded {
                     VStack(alignment: .leading, spacing: 6) {
