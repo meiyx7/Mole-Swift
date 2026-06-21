@@ -159,7 +159,8 @@ enum NativeMetrics {
         while true {
             if let addr = ptr.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_LINK) {
                 let name = String(cString: ptr.pointee.ifa_name)
-                if name != "lo0" && !name.hasPrefix("awdl") && !name.hasPrefix("utun") {
+                // Only physical interfaces: en0 (WiFi), en1 (Ethernet), etc.
+                if name.hasPrefix("en") {
                     let data = UnsafeRawPointer(ptr.pointee.ifa_data).bindMemory(to: if_data.self, capacity: 1)
                     let rx = UInt64(data.pointee.ifi_ibytes)
                     let tx = UInt64(data.pointee.ifi_obytes)
