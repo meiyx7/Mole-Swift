@@ -489,19 +489,41 @@ struct StatusView: View {
                     }
                 }
                 if !history.rxHistory.isEmpty {
+                    let maxCount = max(history.rxHistory.count, history.txHistory.count)
+                    let paired = (0..<maxCount).map { i in
+                        (idx: i,
+                         rx: i < history.rxHistory.count ? history.rxHistory[i] : 0,
+                         tx: i < history.txHistory.count ? history.txHistory[i] : 0)
+                    }
                     Chart {
-                        ForEach(history.rxHistory.indices, id: \.self) { i in
-                            LineMark(x: .value("t", i), y: .value("rx", history.rxHistory[i]))
-                                .foregroundStyle(.green)
+                        ForEach(paired, id: \.idx) { p in
+                            LineMark(
+                                x: .value("t", p.idx),
+                                y: .value("rate", p.rx)
+                            )
+                            .foregroundStyle(.green)
+                            .interpolationMethod(.catmullRom)
                         }
-                        ForEach(history.txHistory.indices, id: \.self) { i in
-                            LineMark(x: .value("t", i), y: .value("tx", history.txHistory[i]))
-                                .foregroundStyle(.orange)
+                        ForEach(paired, id: \.idx) { p in
+                            LineMark(
+                                x: .value("t", p.idx),
+                                y: .value("rate", p.tx)
+                            )
+                            .foregroundStyle(.orange)
+                            .interpolationMethod(.catmullRom)
                         }
                     }
                     .chartXAxis(.hidden)
                     .chartYAxis(.hidden)
-                    .frame(height: 44)
+                    .chartLegend(position: .bottom, spacing: 4) {
+                        HStack(spacing: 12) {
+                            Label(loc.t("下载", "RX"), systemImage: "circle.fill")
+                                .font(.system(size: 9)).foregroundColor(.green)
+                            Label(loc.t("上传", "TX"), systemImage: "circle.fill")
+                                .font(.system(size: 9)).foregroundColor(.orange)
+                        }
+                    }
+                    .frame(height: 50)
                 }
             }
         }
