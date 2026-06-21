@@ -37,6 +37,14 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 
 ## 版本记录 / Changelog
 
+### v1.6.1
+
+- 修复两种 purge 模式扫描结果出现重复记录的问题
+- CLI 交互模式：MoTUI.parse 帧边界检测从 "N selected" 改为 "Select Categories"，修复 PTY 分块读取导致帧头被拆分、帧未重置、条目被重复累加
+- CLI 交互模式：parseItem 正确解析 Mole TUI 行格式（project_path size | artifact_type | age），不再把 age 标签误当 location
+- 本地扫描模式：搜索路径标准化（resolve symlinks + 大小写归一）后去重，修复 ~/Code 和 ~/code 在大小写不敏感文件系统上被当作两个路径扫描两次
+- 本地扫描模式：扫描结果按 resolved path 去重，修复搜索路径有包含关系时同一 artifact 被多次加入
+
 ### v1.6.0
 
 - 新增「清理项目（CLI 交互）」二级菜单，与原有「清理项目（本地扫描）」并存

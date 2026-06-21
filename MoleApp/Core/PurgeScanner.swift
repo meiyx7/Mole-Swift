@@ -162,15 +162,21 @@ enum PurgeScanner {
         let fm = FileManager.default
         let home = NSHomeDirectory()
 
-        // Build the resolved search path set. Use a Set to dedupe across
-        // the default list and the user config (case-insensitive FS can
-        // produce ~/Code vs ~/code duplicates).
-        var searchPaths = Set<String>()
-        for raw in defaultSearchPaths {
-            searchPaths.insert(expandTilde(raw, home: home))
-        }
-        for raw in readUserConfigPaths(home: home) {
-            searchPaths.insert(raw)
+        // Build the resolved search path set. Resolve symlinks and
+        // standardize case before deduping: macOS HFS+/APFS is
+        // case-insensitive, so ~/Code and ~/code point to the same dir.
+        // Without this, both paths pass fileExists and the same artifacts
+        // get scanned twice, producing duplicate entries.
+        // Keep original-paths list for traversal; use standardized set
+        // only for dedup so display paths stay readable.
+        var seenRoots = Set<String>()
+        var searchPaths: [String] = []
+        for raw in defaultSearchPaths + readUserConfigPaths(home: home) {
+            let expanded = expandTilde(raw, home: home)
+            let key = standardizePath(expanded, fm: fm)
+            if seenRoots.insert(key).inserted {
+                searchPaths.append(expanded)
+            }
         }
 
         let now = Date().timeIntervalSince1970
@@ -185,8 +191,23 @@ enum PurgeScanner {
             scanDirectory(rootURL, depth: 0, fm: fm, now: now, into: &results)
         }
 
+        // Dedupe by resolved path: overlapping search roots (e.g. ~/dev
+        // containing ~/dev/subdir that is also a configured root) can
+        // surface the same artifact via two paths. Keep the first
+        // (largest-size) occurrence.
+        var seen = Set<String>()
+        results = results.filter { seen.insert($0.url.resolvingSymlinksInPath().path).inserted }
+
         // Sort by size descending, matching the CLI's default ordering.
         return results.sorted { $0.sizeBytes > $1.sizeBytes }
+    }
+
+    /// Standardizes a path for dedup: resolves symlinks and lowercases
+    /// for case-insensitive comparison on HFS+/APFS. Returns the original
+    /// path if resolution fails (non-existent path).
+    private static func standardizePath(_ path: String, fm: FileManager) -> String {
+        let url = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+        return url.path.lowercased()
     }
 
     // MARK: - Scan internals

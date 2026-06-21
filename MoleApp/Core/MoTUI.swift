@@ -27,7 +27,12 @@ enum MoTUI {
     private static let cursorMark: Character = "\u{27A4}" // ➤
 
     /// 解析 Mole 选择 TUI 的最后一帧重绘。TUI 每次按键都重绘整个列表，
-    /// 每帧以 "N selected" 头开始，遇到头就重置，最终留下最近一帧。
+    /// 每帧以 "Select Categories" 头开始，遇到头就重置，最终留下最近一帧。
+    ///
+    /// 帧边界用 "Select Categories" 而非 "N selected" 检测：PTY 分块读取
+    /// 可能把 "N selected" 拆到下一块，导致帧头不完整、帧未重置、条目被
+    /// 重复累加。"Select Categories" 是 Mole TUI 每帧第一行 `clear_line`
+    /// 之后输出的固定文本，总在同一行完整出现。
     static func parse(_ raw: String) -> MoTUIScreen {
         let text = ANSIStripper.strip(raw)
         var items: [MoTUIItem] = []
@@ -36,8 +41,10 @@ enum MoTUI {
 
         for rawLine in text.components(separatedBy: "\n") {
             let line = rawLine.replacingOccurrences(of: "\r", with: "")
-            if let n = selectedCountIn(line) {       // 头 → 新帧
-                selectedCount = n
+            // 帧头：Mole TUI 每帧第一行。用 "Select Categories" 检测帧边界，
+            // 同时尝试从中提取 "N selected" 计数。
+            if line.contains("Select Categories") {
+                selectedCount = extractSelectedCount(line) ?? selectedCount
                 items = []
                 cursor = 0
                 continue
@@ -47,6 +54,15 @@ enum MoTUI {
             items.append(item)
         }
         return MoTUIScreen(items: items, cursor: cursor, selectedCount: selectedCount)
+    }
+
+    /// 从帧头行提取 "N selected" 计数。帧头形如
+    /// "Select Categories to Clean, 1.26GB, 3 selected"。
+    /// 单独提取是因为 PTY 分块可能把 "N selected" 拆到下一行，此时返回
+    /// nil，保留上一帧的计数。
+    private static func extractSelectedCount(_ line: String) -> Int? {
+        guard let r = line.range(of: #"(\d+)\s+selected"#, options: .regularExpression) else { return nil }
+        return Int(line[r].split(separator: " ").first ?? "")
     }
 
     /// 屏幕上当前被勾选（●）的行索引集合。
@@ -112,26 +128,31 @@ enum MoTUI {
 
     // MARK: - 解析辅助
 
-    private static func selectedCountIn(_ line: String) -> Int? {
-        guard let r = line.range(of: #"(\d+)\s+selected"#, options: .regularExpression) else { return nil }
-        return Int(line[r].split(separator: " ").first ?? "")
-    }
-
     /// 解析一行条目 → (item, 是否光标行)。非条目行返回 nil。
+    ///
+    /// Mole TUI 行格式（lib/clean/project.sh format_purge_display）：
+    ///   `➤ ○ project_path  size | artifact_type | age`
+    /// 其中 `| age` 仅当 artifact 是近期修改时出现。`project_path` 可能含
+    /// 空格（如 `~/dev/my app`），所以按 `|` 先切出左侧再按空格拆分。
     private static func parseItem(_ line: String) -> (MoTUIItem, Bool)? {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard let markerIdx = trimmed.firstIndex(where: { $0 == checked || $0 == unchecked }) else { return nil }
         let isCursor = trimmed.first == cursorMark
         let selected = trimmed[markerIdx] == checked
         let rest = trimmed[trimmed.index(after: markerIdx)...].trimmingCharacters(in: .whitespaces)
-        // rest: "Inkling-0.0.1.dmg                 771KB | Desktop"
+        // rest: "~/dev/myapp  1.26GB | node_modules | 3d"
         let pipeParts = rest.components(separatedBy: "|")
-        let location = pipeParts.count > 1 ? pipeParts[1].trimmingCharacters(in: .whitespaces) : ""
+        // 左侧 "project_path  size"：按空格拆分，最后一段是 size，前面合并为 name
         let left = pipeParts[0].split(separator: " ", omittingEmptySubsequences: true).map(String.init)
         guard left.count >= 2 else { return nil }
         let size = left.last!
         let name = left.dropLast().joined(separator: " ")
         guard !name.isEmpty else { return nil }
+        // 右侧：第一个 `|` 后是 artifact_type（如 node_modules），第二个 `|` 后是 age（如 3d）
+        let artifactType = pipeParts.count > 1 ? pipeParts[1].trimmingCharacters(in: .whitespaces) : ""
+        let age = pipeParts.count > 2 ? pipeParts[2].trimmingCharacters(in: .whitespaces) : ""
+        // location 字段在 MoTUIItem 里复用为 "artifact_type · age" 展示
+        let location = [artifactType, age].filter { !$0.isEmpty }.joined(separator: " · ")
         return (MoTUIItem(name: name, size: size, location: location, selected: selected), isCursor)
     }
 }
