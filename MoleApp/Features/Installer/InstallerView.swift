@@ -37,8 +37,12 @@ struct InstallerView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         header
                         stepGuide
-                        categoriesCard
-                        previewCard
+                        if phase == .idle {
+                            idleHeroCard
+                            categoriesCard
+                        } else {
+                            previewCard
+                        }
                     }
                 }
                 .featurePadding()
@@ -82,6 +86,33 @@ struct InstallerView: View {
 
     private var phaseIsAfterScan: Bool {
         phase == .scanned || phase == .running || phase == .done
+    }
+
+    // MARK: - Idle hero card
+
+    private var idleHeroCard: some View {
+        Card(padding: 0) {
+            VStack(spacing: 14) {
+                Image(systemName: "shippingbox.fill")
+                    .font(.system(size: 32, weight: .light))
+                    .foregroundColor(Theme.accent.opacity(0.7))
+                Text(loc.t("点击「开始扫描」查找可安全删除的安装包文件（.dmg、.pkg、.iso、.xip、.zip）。",
+                           "Click \"Start Scan\" to find installer files safe to delete (.dmg, .pkg, .iso, .xip, .zip)."))
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 380)
+                Button {
+                    scanNow()
+                } label: {
+                    Label(loc.t("开始扫描", "Start Scan"), systemImage: "magnifyingglass")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+            .frame(maxWidth: .infinity)
+            .padding(24)
+        }
     }
 
     // MARK: - Categories card

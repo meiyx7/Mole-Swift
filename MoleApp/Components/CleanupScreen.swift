@@ -6,7 +6,7 @@ import SwiftUI
 /// handles the lifecycle, the visual preview, and the raw console fallback.
 ///
 /// 布局规范（与 InstallerView/PurgeInteractiveView 一致）：
-/// header（无按钮）→ stepGuide → categoriesCard（功能说明）→ previewCard（扫描结果 + 内嵌操作栏）。
+/// header（无按钮）→ stepGuide → idle: heroCard + categoriesCard | 其他: previewCard（扫描结果 + 内嵌操作栏）。
 struct CleanupScreen: View {
     let title: String
     let subtitle: String
@@ -54,8 +54,12 @@ struct CleanupScreen: View {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 stepGuide
-                categoriesCard
-                previewCard
+                if phase == .idle {
+                    idleHeroCard
+                    categoriesCard
+                } else {
+                    previewCard
+                }
             }
         }
         .featurePadding()
@@ -104,6 +108,32 @@ struct CleanupScreen: View {
 
     private var phaseIsAfterPreview: Bool {
         phase == .previewed || phase == .running || phase == .done || phase == .error
+    }
+
+    // MARK: - Idle hero card
+
+    private var idleHeroCard: some View {
+        Card(padding: 0) {
+            VStack(spacing: 14) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 32, weight: .light))
+                    .foregroundColor(Theme.accent.opacity(0.7))
+                Text(previewHint)
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 380)
+                Button {
+                    Task { await runPreview() }
+                } label: {
+                    Label(loc.t("开始扫描", "Start Scan"), systemImage: "magnifyingglass")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+            .frame(maxWidth: .infinity)
+            .padding(24)
+        }
     }
 
     // MARK: - Categories card
