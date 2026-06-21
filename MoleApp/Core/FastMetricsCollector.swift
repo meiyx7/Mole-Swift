@@ -57,28 +57,27 @@ final class FastMetricsCollector {
             base.disks[idx] = rootDisk
         }
 
-        // Network: native rates + accumulate history
-        let netRate = NativeMetrics.readNetworkRate()
-        let interfaces = NativeMetrics.listInterfaces()
+        // Network: per-interface native rates
+        let ifaceRates = NativeMetrics.readInterfaceRates()
 
-        // Build updated network list with native rates
+        // Build updated network list with per-interface rates
         var updatedNetworks: [NetworkStatus] = []
-        for iface in interfaces {
+        for rate in ifaceRates {
             var found = false
-            for var n in base.network where n.name == iface.name {
-                n.rxRateMBs = netRate.rxBytesPerSec / 1_048_576.0
-                n.txRateMBs = netRate.txBytesPerSec / 1_048_576.0
-                n.ip = iface.ip
+            for var n in base.network where n.name == rate.name {
+                n.rxRateMBs = rate.rxBytesPerSec / 1_048_576.0
+                n.txRateMBs = rate.txBytesPerSec / 1_048_576.0
+                n.ip = rate.ip
                 updatedNetworks.append(n)
                 found = true
                 break
             }
             if !found {
                 updatedNetworks.append(NetworkStatus(
-                    name: iface.name,
-                    rxRateMBs: netRate.rxBytesPerSec / 1_048_576.0,
-                    txRateMBs: netRate.txBytesPerSec / 1_048_576.0,
-                    ip: iface.ip
+                    name: rate.name,
+                    rxRateMBs: rate.rxBytesPerSec / 1_048_576.0,
+                    txRateMBs: rate.txBytesPerSec / 1_048_576.0,
+                    ip: rate.ip
                 ))
             }
         }
@@ -87,10 +86,10 @@ final class FastMetricsCollector {
         }
 
         // Accumulate network history (total rx/tx across all interfaces)
-        let totalRx = updatedNetworks.reduce(0) { $0 + $1.rxRateMBs }
-        let totalTx = updatedNetworks.reduce(0) { $0 + $1.txRateMBs }
-        rxHistory.append(totalRx)
-        txHistory.append(totalTx)
+        let totalRx = ifaceRates.reduce(0) { $0 + $1.rxBytesPerSec }
+        let totalTx = ifaceRates.reduce(0) { $0 + $1.txBytesPerSec }
+        rxHistory.append(totalRx / 1_048_576.0)
+        txHistory.append(totalTx / 1_048_576.0)
         if rxHistory.count > maxHistoryPoints {
             rxHistory.removeFirst()
             txHistory.removeFirst()

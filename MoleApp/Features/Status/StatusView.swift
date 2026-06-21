@@ -85,6 +85,14 @@ final class StatusViewModel: ObservableObject {
     }
 }
 
+/// Data point for the network chart. Using a struct with stable id
+/// avoids SwiftUI Charts rendering issues with tuple-based ForEach.
+private struct NetPoint: Identifiable {
+    let id: String
+    let t: Int
+    let v: Double
+}
+
 struct StatusView: View {
     @StateObject private var vm = StatusViewModel()
     @EnvironmentObject private var service: MoleService
@@ -490,27 +498,18 @@ struct StatusView: View {
                 }
                 if !history.rxHistory.isEmpty {
                     let maxCount = max(history.rxHistory.count, history.txHistory.count)
-                    let paired = (0..<maxCount).map { i in
-                        (idx: i,
-                         rx: i < history.rxHistory.count ? history.rxHistory[i] : 0,
-                         tx: i < history.txHistory.count ? history.txHistory[i] : 0)
-                    }
+                    let rxData = (0..<maxCount).map { NetPoint(id: "rx\($0)", t: $0, v: $0 < history.rxHistory.count ? history.rxHistory[$0] : 0) }
+                    let txData = (0..<maxCount).map { NetPoint(id: "tx\($0)", t: $0, v: $0 < history.txHistory.count ? history.txHistory[$0] : 0) }
                     Chart {
-                        ForEach(paired, id: \.idx) { p in
-                            LineMark(
-                                x: .value("t", p.idx),
-                                y: .value("下载", p.rx)
-                            )
-                            .foregroundStyle(.green)
-                            .interpolationMethod(.catmullRom)
+                        ForEach(rxData) { p in
+                            LineMark(x: .value("t", p.t), y: .value("v", p.v))
+                                .foregroundStyle(.green)
+                                .interpolationMethod(.catmullRom)
                         }
-                        ForEach(paired, id: \.idx) { p in
-                            LineMark(
-                                x: .value("t", p.idx),
-                                y: .value("上传", p.tx)
-                            )
-                            .foregroundStyle(.orange)
-                            .interpolationMethod(.catmullRom)
+                        ForEach(txData) { p in
+                            LineMark(x: .value("t", p.t), y: .value("v", p.v))
+                                .foregroundStyle(.orange)
+                                .interpolationMethod(.catmullRom)
                         }
                     }
                     .chartXAxis(.hidden)

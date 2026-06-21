@@ -135,36 +135,55 @@ enum NativeMetrics {
 
     // MARK: - Network
 
-    struct NetworkRate {
+    struct InterfaceRate {
+        let name: String
         let rxBytesPerSec: Double
         let txBytesPerSec: Double
+        let ip: String
     }
 
-    private static var lastRx: UInt64 = 0
-    private static var lastTx: UInt64 = 0
+    private static var lastInterfaceBytes: [String: (rx: UInt64, tx: UInt64)] = [:]
     private static var lastNetTime: Date = .distantPast
 
-    /// Reads network byte counters via getifaddrs and computes rate since last call.
-    static func readNetworkRate() -> NetworkRate {
-        var rxTotal: UInt64 = 0
-        var txTotal: UInt64 = 0
-
+    /// Reads per-interface network byte counters via getifaddrs and computes rate since last call.
+    static func readInterfaceRates() -> [InterfaceRate] {
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else {
-            return NetworkRate(rxBytesPerSec: 0, txBytesPerSec: 0)
-        }
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return [] }
         defer { freeifaddrs(ifaddr) }
+
+        // First pass: collect current byte counters per interface
+        var currentBytes: [String: (rx: UInt64, tx: UInt64)] = [:]
+        var ifaceOrder: [String] = []
 
         var ptr = first
         while true {
             if let addr = ptr.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_LINK) {
-                let data = UnsafeRawPointer(ptr.pointee.ifa_data).bindMemory(to: if_data.self, capacity: 1)
                 let name = String(cString: ptr.pointee.ifa_name)
-                // Skip loopback and unnecessary interfaces
                 if name != "lo0" && !name.hasPrefix("awdl") && !name.hasPrefix("utun") {
-                    rxTotal += UInt64(data.pointee.ifi_ibytes)
-                    txTotal += UInt64(data.pointee.ifi_obytes)
+                    let data = UnsafeRawPointer(ptr.pointee.ifa_data).bindMemory(to: if_data.self, capacity: 1)
+                    let rx = UInt64(data.pointee.ifi_ibytes)
+                    let tx = UInt64(data.pointee.ifi_obytes)
+                    currentBytes[name] = (rx, tx)
+                    if !ifaceOrder.contains(name) { ifaceOrder.append(name) }
                 }
+            }
+            guard let next = ptr.pointee.ifa_next else { break }
+            ptr = next
+        }
+
+        // Second pass: collect IPs
+        var ifaceIPs: [String: String] = [:]
+        ptr = first
+        while true {
+            let name = String(cString: ptr.pointee.ifa_name)
+            if let addr = ptr.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET),
+               currentBytes.keys.contains(name) {
+                var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                getnameinfo(addr, socklen_t(addr.pointee.sa_len),
+                            &hostname, socklen_t(hostname.count),
+                            nil, 0, NI_NUMERICHOST)
+                let ip = String(cString: hostname)
+                if ip != "0.0.0.0" { ifaceIPs[name] = ip }
             }
             guard let next = ptr.pointee.ifa_next else { break }
             ptr = next
@@ -172,19 +191,27 @@ enum NativeMetrics {
 
         let now = Date()
         let elapsed = now.timeIntervalSince(lastNetTime)
-        var rate = NetworkRate(rxBytesPerSec: 0, txBytesPerSec: 0)
+        var results: [InterfaceRate] = []
 
-        if elapsed > 0.1 && lastNetTime > .distantPast {
-            let rxDelta = rxTotal > lastRx ? rxTotal - lastRx : 0
-            let txDelta = txTotal > lastTx ? txTotal - lastTx : 0
-            rate = NetworkRate(rxBytesPerSec: Double(rxDelta) / elapsed,
-                               txBytesPerSec: Double(txDelta) / elapsed)
+        for name in ifaceOrder {
+            guard let cur = currentBytes[name] else { continue }
+            let ip = ifaceIPs[name] ?? ""
+            var rxRate: Double = 0
+            var txRate: Double = 0
+
+            if elapsed > 0.1, let prev = lastInterfaceBytes[name] {
+                let rxDelta = cur.rx > prev.rx ? cur.rx - prev.rx : 0
+                let txDelta = cur.tx > prev.tx ? cur.tx - prev.tx : 0
+                rxRate = Double(rxDelta) / elapsed
+                txRate = Double(txDelta) / elapsed
+            }
+
+            results.append(InterfaceRate(name: name, rxBytesPerSec: rxRate, txBytesPerSec: txRate, ip: ip))
         }
 
-        lastRx = rxTotal
-        lastTx = txTotal
+        lastInterfaceBytes = currentBytes
         lastNetTime = now
-        return rate
+        return results
     }
 
     // MARK: - Load Average
@@ -194,40 +221,5 @@ enum NativeMetrics {
         var loadavg: [Double] = [0, 0, 0]
         getloadavg(&loadavg, 3)
         return (loadavg[0], loadavg[1], loadavg[2])
-    }
-
-    // MARK: - Network Interfaces
-
-    struct InterfaceInfo {
-        let name: String
-        let ip: String
-    }
-
-    /// Lists active network interface names and IPs (excludes loopback/virtual).
-    static func listInterfaces() -> [InterfaceInfo] {
-        var results: [InterfaceInfo] = []
-
-        var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return results }
-        defer { freeifaddrs(ifaddr) }
-
-        var ptr = first
-        while true {
-            let name = String(cString: ptr.pointee.ifa_name)
-            if let addr = ptr.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET),
-               name != "lo0" && !name.hasPrefix("awdl") && !name.hasPrefix("utun") {
-                var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                getnameinfo(addr, socklen_t(addr.pointee.sa_len),
-                            &hostname, socklen_t(hostname.count),
-                            nil, 0, NI_NUMERICHOST)
-                let ip = String(cString: hostname)
-                if ip != "0.0.0.0" && !results.contains(where: { $0.name == name }) {
-                    results.append(InterfaceInfo(name: name, ip: ip))
-                }
-            }
-            guard let next = ptr.pointee.ifa_next else { break }
-            ptr = next
-        }
-        return results
     }
 }
