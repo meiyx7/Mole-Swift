@@ -70,8 +70,12 @@ enum InstallerScanner {
     /// overridden via `MOLE_INSTALLER_SCAN_MAX_DEPTH` env var, matching the
     /// CLI's `${MOLE_INSTALLER_SCAN_MAX_DEPTH:-$INSTALLER_SCAN_MAX_DEPTH_DEFAULT}`.
     private static var maxDepth: Int {
-        if let raw = ProcessInfo.processInfo.environment["MOLE_INSTALLER_SCAN_MAX_DEPTH"],
-           let n = Int(raw), n > 0 {
+        // Read MOLE_INSTALLER_SCAN_MAX_DEPTH via getenv. We avoid
+        // ProcessInfo.processInfo because under @MainActor isolation on
+        // certain SDK versions the static accessor resolves incorrectly.
+        if let raw = getenv("MOLE_INSTALLER_SCAN_MAX_DEPTH"),
+           let s = String(cString: raw, encoding: .utf8),
+           let n = Int(s), n > 0 {
             return n
         }
         return 2

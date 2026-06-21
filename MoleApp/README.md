@@ -37,6 +37,10 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 
 ## 版本记录 / Changelog
 
+### v1.5.11
+
+- 修复 v1.5.10 构建失败：InstallerScanner 和 UpdateChecker 中的 `ProcessInfo.processInfo` 在 @MainActor 隔离下解析异常，改用 `getenv()` 读取环境变量
+
 ### v1.5.10
 
 - 安装包扫描全面对齐 CLI（bin/installer.sh）

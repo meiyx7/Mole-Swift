@@ -373,7 +373,11 @@ final class UpdateChecker: ObservableObject {
         // osascript with administrator privileges. This mirrors the
         // CLI's MOLE_TEST_NO_AUTH / MOLE_TEST_MODE contract so tests
         // and CI never trigger an auth prompt.
-        if ProcessInfo.processInfo.environment["MOLE_TEST_NO_AUTH"] == "1" {
+        // Read via getenv to avoid ProcessInfo.processInfo which
+        // resolves incorrectly under @MainActor on some SDK versions.
+        if let raw = getenv("MOLE_TEST_NO_AUTH"),
+           let s = String(cString: raw, encoding: .utf8),
+           s == "1" {
             throw NSError(
                 domain: "UpdateChecker",
                 code: 3,
