@@ -85,10 +85,10 @@ final class StatusViewModel: ObservableObject {
     }
 }
 
-/// Data point for the network chart. Using a struct with stable id
-/// avoids SwiftUI Charts rendering issues with tuple-based ForEach.
+/// Data point for the network chart.
 private struct NetPoint: Identifiable {
     let id: String
+    let series: String
     let t: Int
     let v: Double
 }
@@ -498,20 +498,27 @@ struct StatusView: View {
                 }
                 if !history.rxHistory.isEmpty {
                     let maxCount = max(history.rxHistory.count, history.txHistory.count)
-                    let rxData = (0..<maxCount).map { NetPoint(id: "rx\($0)", t: $0, v: $0 < history.rxHistory.count ? history.rxHistory[$0] : 0) }
-                    let txData = (0..<maxCount).map { NetPoint(id: "tx\($0)", t: $0, v: $0 < history.txHistory.count ? history.txHistory[$0] : 0) }
-                    Chart {
-                        ForEach(rxData) { p in
-                            LineMark(x: .value("t", p.t), y: .value("下载", p.v))
-                                .foregroundStyle(.green)
-                                .interpolationMethod(.catmullRom)
-                        }
-                        ForEach(txData) { p in
-                            LineMark(x: .value("t", p.t), y: .value("上传", p.v))
-                                .foregroundStyle(.orange)
-                                .interpolationMethod(.catmullRom)
-                        }
+                    let chartData: [NetPoint] = (0..<maxCount).flatMap { i in
+                        let rx = i < history.rxHistory.count ? history.rxHistory[i] : 0
+                        let tx = i < history.txHistory.count ? history.txHistory[i] : 0
+                        return [
+                            NetPoint(id: "rx\(i)", series: "下载", t: i, v: rx),
+                            NetPoint(id: "tx\(i)", series: "上传", t: i, v: tx)
+                        ]
                     }
+                    Chart(chartData) { p in
+                        LineMark(
+                            x: .value("t", p.t),
+                            y: .value("v", p.v),
+                            series: .value("type", p.series)
+                        )
+                        .interpolationMethod(.catmullRom)
+                    }
+                    .foregroundStyle(by: .value("type", ""))
+                    .chartForegroundStyleScale([
+                        "下载": Color.green,
+                        "上传": Color.orange
+                    ])
                     .chartXAxis(.hidden)
                     .chartYAxis(.hidden)
                     .chartLegend(position: .bottom, spacing: 4) {

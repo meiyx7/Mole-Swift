@@ -41,7 +41,7 @@ enum Feature: String, CaseIterable, Identifiable, Hashable {
         case .purgeInteractive: return loc.t("清理项目构建产物", "Clean project build artifacts")
         case .installer: return loc.t("查找残留安装包", "Find leftover installers")
         case .history: return loc.t("清理活动记录", "Cleanup activity")
-        case .settings: return loc.t("Touch ID、更新等", "Touch ID, updates & more")
+        case .settings: return loc.t("语言、更新等", "Language, updates & more")
         }
     }
 
