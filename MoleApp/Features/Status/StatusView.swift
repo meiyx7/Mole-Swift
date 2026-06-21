@@ -507,14 +507,10 @@ struct StatusView: View {
                         ]
                     }
                     Chart(chartData) { p in
-                        LineMark(
-                            x: .value("t", p.t),
-                            y: .value("v", p.v),
-                            series: .value("type", p.series)
-                        )
-                        .interpolationMethod(.catmullRom)
+                        LineMark(x: .value("t", p.t), y: .value("v", p.v))
+                            .foregroundStyle(by: .value("type", p.series))
+                            .interpolationMethod(.catmullRom)
                     }
-                    .foregroundStyle(by: .value("type", ""))
                     .chartForegroundStyleScale([
                         "下载": Color.green,
                         "上传": Color.orange
