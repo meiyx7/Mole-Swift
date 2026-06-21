@@ -51,7 +51,7 @@ struct InstallerView: View {
                     Button(loc.t("取消", "Cancel"), role: .cancel) {}
                     Button(loc.t("运行", "Run"), role: .destructive) { runNow() }
                 } message: {
-                    Text(loc.t("这将通过 Mole CLI 删除扫描到的安装包文件（路由到废纸篓）。", "This will delete the scanned installer files via the Mole CLI (routed to Trash)."))
+                    Text(loc.t("这将通过 Mole CLI 永久删除扫描到的安装包文件，此操作不可撤销。", "This will permanently delete the scanned installer files via the Mole CLI. This cannot be undone."))
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
                     if !runner.isRunning { scanNow() }
@@ -267,8 +267,8 @@ struct InstallerView: View {
                             ? loc.t("完成", "Finished")
                             : loc.t("未完全成功", "Completed with errors")))
                         .font(.system(size: 14, weight: .semibold))
-                    Text(loc.t("安装包文件已移至废纸篓，可从废纸篓恢复。",
-                               "Installer files moved to Trash, recoverable from Trash."))
+                    Text(loc.t("安装包文件已永久删除。",
+                               "Installer files permanently deleted."))
                         .font(.system(size: 11)).foregroundColor(.secondary)
                 }
                 Spacer()
@@ -368,12 +368,6 @@ struct InstallerView: View {
                 Button(loc.t("停止", "Stop"), role: .destructive) { runner.cancel() }
                     .buttonStyle(.bordered)
             case .done:
-                if runner.succeeded {
-                    Button { openTrash() } label: {
-                        Label(loc.t("打开废纸篓", "Open Trash"), systemImage: "trash")
-                    }
-                    .buttonStyle(.bordered)
-                }
                 Spacer()
                 Button { resetToIdle() } label: {
                     Label(loc.t("再清理一次", "Run Again"), systemImage: "arrow.clockwise")
@@ -411,11 +405,6 @@ struct InstallerView: View {
         case .running: return loc.t("运行中…", "Running…")
         case .done: return loc.t("已完成", "Finished")
         }
-    }
-
-    private func openTrash() {
-        let trashPath = NSString(string: "~/.Trash").expandingTildeInPath
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: trashPath)])
     }
 
     // MARK: - Actions

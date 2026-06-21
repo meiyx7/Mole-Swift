@@ -141,7 +141,7 @@ final class PurgeInteractiveRunner: ObservableObject {
 
 // MARK: - View
 
-/// 清理项目视图：扫描项目构建产物，勾选后由 Mole 执行删除（路由到废纸篓）。
+/// 清理项目视图：扫描项目构建产物，勾选后由 Mole 执行永久删除。
 ///
 /// 布局规范（与 CleanupScreen/InstallerView 一致）：
 /// header（无按钮）→ stepGuide → categoriesCard（功能说明）→ previewCard（扫描结果 + 内嵌操作栏）。
@@ -287,7 +287,7 @@ struct PurgeInteractiveView: View {
                         categoryRow(loc.t("临时文件", "Temp Files"),
                                     loc.t(".tmp、.cache 等临时目录", ".tmp, .cache temp dirs"), "clock")
                         categoryRow(loc.t("安全删除", "Safe Deletion"),
-                                    loc.t("删除路由到废纸篓，可恢复", "Deleted to Trash, recoverable"), "trash")
+                                    loc.t("永久删除，不可恢复", "Permanent, not recoverable"), "trash")
                     }
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -601,12 +601,6 @@ struct PurgeInteractiveView: View {
                     if case .done(let c) = runner.phase { return c }
                     return -1
                 }()
-                if code == 0 {
-                    Button { openTrash() } label: {
-                        Label(loc.t("打开废纸篓", "Open Trash"), systemImage: "trash")
-                    }
-                    .buttonStyle(.bordered)
-                }
                 Spacer()
                 Button { resetToIdle() } label: {
                     Label(loc.t("再清理一次", "Run Again"), systemImage: "arrow.clockwise")
@@ -678,14 +672,9 @@ struct PurgeInteractiveView: View {
         let preview = targets.prefix(12).map { "• \($0.name)" }.joined(separator: "\n")
         let more = targets.count > 12 ? "\n… \(loc.t("还有 \(targets.count - 12) 项", "and \(targets.count - 12) more"))" : ""
         return loc.t(
-            "将删除以下 \(targets.count) 个项目的构建产物：\n\n\(preview)\(more)\n\n删除路由到废纸篓，可从废纸篓恢复。",
-            "Build artifacts from these \(targets.count) projects will be removed:\n\n\(preview)\(more)\n\nDeletion is routed to Trash, recoverable from Trash."
+            "将永久删除以下 \(targets.count) 个项目的构建产物：\n\n\(preview)\(more)\n\n此操作不可撤销。",
+            "Will permanently delete build artifacts from these \(targets.count) projects:\n\n\(preview)\(more)\n\nThis cannot be undone."
         )
-    }
-
-    private func openTrash() {
-        let trashPath = NSString(string: "~/.Trash").expandingTildeInPath
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: trashPath)])
     }
 
     private func startScan() {

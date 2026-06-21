@@ -69,8 +69,8 @@ struct CleanupScreen: View {
             Button(actionLabel ?? loc.t("运行", "Run"), role: .destructive) { runNow() }
         } message: {
             Text(confirmMessage ?? loc.t(
-                "这将把扫描中识别的项目移至废纸篓，可从废纸篓恢复。系统级项目需要活动的 sudo 会话。",
-                "This will move the items shown in the scan to Trash, where they can be recovered. Some steps may require an active sudo session."
+                "这将永久删除扫描中识别的项目，此操作不可撤销。系统级项目需要活动的 sudo 会话。",
+                "This will permanently delete the items shown in the scan. This cannot be undone. Some steps may require an active sudo session."
             ))
         }
         .onReceive(NotificationCenter.default.publisher(for: .moleRefresh)) { _ in
@@ -329,12 +329,6 @@ struct CleanupScreen: View {
                 Button(loc.t("停止", "Stop"), role: .destructive) { runner.cancel() }
                     .buttonStyle(.bordered)
             case .done:
-                if runner.succeeded {
-                    Button { openTrash() } label: {
-                        Label(loc.t("打开废纸篓", "Open Trash"), systemImage: "trash")
-                    }
-                    .buttonStyle(.bordered)
-                }
                 Spacer()
                 Button { resetToIdle() } label: {
                     Label(loc.t("再清理一次", "Run Again"), systemImage: "arrow.clockwise")
@@ -393,16 +387,11 @@ struct CleanupScreen: View {
         if let snap = previewSnapshot {
             let space = snap.totalSpaceText ?? "—"
             let items = snap.totalItems ?? snap.entries.filter { $0.kind == .wouldClean }.count
-            return loc.t("本次可回收约 \(space) · \(items) 项已移至废纸篓，可从废纸篓恢复。",
-                         "Approximately \(space) reclaimable · \(items) items moved to Trash, recoverable from Trash.")
+            return loc.t("本次可回收约 \(space) · \(items) 项已永久删除。",
+                         "Approximately \(space) reclaimable · \(items) items permanently deleted.")
         }
-        return loc.t("操作已完成，已移至废纸篓，可从废纸篓恢复。",
-                     "Operation complete. Items moved to Trash, recoverable from Trash.")
-    }
-
-    private func openTrash() {
-        let trashPath = NSString(string: "~/.Trash").expandingTildeInPath
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: trashPath)])
+        return loc.t("操作已完成，已永久删除。",
+                     "Operation complete. Items permanently deleted.")
     }
 
     @MainActor

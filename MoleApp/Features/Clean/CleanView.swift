@@ -31,8 +31,8 @@ struct CleanView: View {
                 run: { onLine in try await service.clean(onLine: onLine) },
                 confirmTitle: loc.t("运行深度清理？", "Run deep cleanup?"),
                 confirmMessage: loc.t(
-                    "Mole 将把扫描中识别的缓存和垃圾文件移至废纸篓，可从废纸篓恢复。系统级项目需要活动的 sudo 会话。",
-                    "Mole will move the caches and junk identified in the scan to Trash, where they can be recovered. System-level items require an active sudo session."
+                    "Mole 将永久删除扫描中识别的缓存和垃圾文件，此操作不可撤销。系统级项目需要活动的 sudo 会话。",
+                    "Mole will permanently delete the caches and junk identified in the scan. This cannot be undone. System-level items require an active sudo session."
                 ),
                 actionLabel: loc.t("清理", "Clean")
             )
