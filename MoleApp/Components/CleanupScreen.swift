@@ -219,12 +219,23 @@ struct CleanupScreen: View {
                 .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
                 .multilineTextAlignment(.center)
                 .padding(12)
-        } else if phase == .previewing || phase == .running {
+        } else if phase == .previewing {
+            VStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(loc.t("正在扫描（试运行）…", "Scanning (dry-run)…"))
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                }
+                if hasVisualContent {
+                    PreviewSummaryView(summary: parsed, loc: loc)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .top)
+            .padding(12)
+        } else if phase == .running {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text(phase == .previewing
-                     ? loc.t("正在扫描（试运行）…", "Scanning (dry-run)…")
-                     : loc.t("正在运行…", "Running…"))
+                Text(loc.t("正在运行…", "Running…"))
                     .font(.system(size: 12)).foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
