@@ -54,9 +54,24 @@ struct PreviewSummaryView: View {
 
     // MARK: - Stat row
 
+    /// Dynamically computed total from entries, used while scanning
+    /// before the CLI's trailing summary line arrives.
+    private var computedTotalSpace: String? {
+        var total: Double = 0
+        var any = false
+        for e in summary.entries where e.kind == .wouldClean {
+            if let s = e.sizeText, let bytes = parseSizeToBytes(s) {
+                total += bytes
+                any = true
+            }
+        }
+        guard any else { return nil }
+        return formatBytes(total)
+    }
+
     @ViewBuilder
     private var statRow: some View {
-        let space = summary.totalSpaceText ?? "—"
+        let space = summary.totalSpaceText ?? computedTotalSpace ?? "—"
         let items = summary.totalItems ?? summary.entries.filter { $0.kind == .wouldClean }.count
         let cats = summary.totalCategories ?? groupedSections.count
         HStack(spacing: 12) {
