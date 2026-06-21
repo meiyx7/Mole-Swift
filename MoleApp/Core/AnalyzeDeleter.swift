@@ -166,7 +166,7 @@ enum AnalyzeDeleter {
         let home = NSHomeDirectory()
         guard !home.isEmpty, !path.isEmpty else { return false }
 
-        let cleanPath = path.standardizingPath
+        let cleanPath = (path as NSString).standardizingPath
         let orbstackState = (home as NSString).appendingPathComponent(".orbstack")
         if cleanPath == orbstackState { return true }
         if cleanPath.hasPrefix(orbstackState + "/") { return true }
