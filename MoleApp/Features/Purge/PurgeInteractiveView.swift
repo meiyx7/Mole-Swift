@@ -195,8 +195,8 @@ struct PurgeInteractiveView: View {
     private var header: some View {
         FeatureHeader(
             title: loc.t("清理项目", "Purge Projects"),
-            subtitle: loc.t("扫描并清理项目构建产物（node_modules、build 目录等），由 Mole 执行删除。",
-                            "Scan and clean project build artifacts (node_modules, build dirs, etc.). Mole performs the deletion."),
+            subtitle: loc.t("扫描并清理项目构建产物（node_modules、build 目录等）。",
+                            "Scan and clean project build artifacts (node_modules, build dirs, etc.)."),
             systemImage: "shippingbox.fill"
         )
     }
