@@ -9,6 +9,10 @@ struct PurgeView: View {
     @State private var showConfirm = false
     @State private var scanError: String?
     @State private var deleteResult: DeleteResult?
+    @State private var progressDone = 0
+    @State private var progressTotal = 0
+    /// Optional type filter. nil = show all. Bound to the filter Picker.
+    @State private var typeFilter: String?
 
     private enum Phase: Equatable { case idle, scanning, scanned, running, done, error }
     private struct DeleteResult: Identifiable {
@@ -17,6 +21,17 @@ struct PurgeView: View {
         let message: String
         let deletedCount: Int
         let freedBytes: Int64
+    }
+
+    /// Artifacts after applying the type filter. This is what the list shows.
+    private var filteredArtifacts: [PurgeScanner.FoundArtifact] {
+        guard let filter = typeFilter else { return artifacts }
+        return artifacts.filter { $0.artifactType == filter }
+    }
+
+    /// Distinct artifact types present in the current scan, for the filter.
+    private var availableTypes: [String] {
+        Array(Set(artifacts.map { $0.artifactType })).sorted()
     }
 
     var totalSelectedSize: Int64 {
@@ -51,11 +66,11 @@ struct PurgeView: View {
             .alert(loc.t("清理选中的项目？", "Purge selected artifacts?"),
                    isPresented: $showConfirm) {
                 Button(loc.t("取消", "Cancel"), role: .cancel) {}
-                Button(loc.t("清理", "Purge"), role: .destructive) { deleteSelected() }
+                Button(loc.t("移至废纸篓", "Move to Trash"), role: .destructive) { deleteSelected() }
             } message: {
                 Text(loc.t(
-                    "将删除 \(selectedIDs.count) 个项目构建产物，共约 \(ByteFormatter.bytes(totalSelectedSize))。",
-                    "Will delete \(selectedIDs.count) project artifacts totaling \(ByteFormatter.bytes(totalSelectedSize))."
+                    "将把 \(selectedIDs.count) 个项目构建产物移至废纸篓，共约 \(ByteFormatter.bytes(totalSelectedSize))。可从废纸篓恢复。",
+                    "Will move \(selectedIDs.count) project artifacts to Trash, totaling \(ByteFormatter.bytes(totalSelectedSize)). Recoverable from Trash."
                 ))
             }
         }
@@ -116,7 +131,6 @@ struct PurgeView: View {
         case .error: return loc.t("重试", "Retry")
         }
     }
-
     private var primaryActionIcon: String {
         switch phase {
         case .idle, .scanning: return "magnifyingglass"
@@ -188,10 +202,18 @@ struct PurgeView: View {
 
     private var runningView: some View {
         Card {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text(loc.t("正在删除选中的项目…", "Deleting selected artifacts…"))
-                    .font(.system(size: 12)).foregroundColor(.secondary)
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(loc.t("正在移至废纸篓…", "Moving to Trash…"))
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                }
+                if progressTotal > 0 {
+                    // Per-item progress so the user can tell the operation
+                    // is advancing, not stuck.
+                    Text(loc.t("\(progressDone) / \(progressTotal)", "\(progressDone) / \(progressTotal)"))
+                        .font(.system(size: 11, design: .rounded)).foregroundColor(.secondary)
+                }
             }
             .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
         }
@@ -214,7 +236,7 @@ struct PurgeView: View {
         Card(padding: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    Text(loc.t("\(artifacts.count) 个构建产物", "\(artifacts.count) artifacts"))
+                    Text(loc.t("\(filteredArtifacts.count) 个构建产物", "\(filteredArtifacts.count) artifacts"))
                         .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
                     Spacer()
                     if !selectedIDs.isEmpty {
@@ -227,29 +249,42 @@ struct PurgeView: View {
 
                 Divider()
 
+                // Type filter + select-all row. The filter narrows the
+                // visible list; select-all operates on the filtered set so
+                // users can batch-select one artifact type at a time.
                 HStack(spacing: 12) {
                     Button {
-                        if selectedIDs.count == artifacts.count {
-                            selectedIDs.removeAll()
+                        let filteredIDs = Set(filteredArtifacts.map { $0.id })
+                        if selectedIDs.isSuperset(of: filteredIDs) {
+                            selectedIDs.subtract(filteredIDs)
                         } else {
-                            selectedIDs = Set(artifacts.map { $0.id })
+                            selectedIDs.formUnion(filteredIDs)
                         }
                     } label: {
-                        Text(selectedIDs.count == artifacts.count
-                             ? loc.t("取消全选", "Deselect All")
-                             : loc.t("全选", "Select All"))
+                        Text(loc.t("全选", "Select All"))
                             .font(.system(size: 11))
                     }
                     .buttonStyle(.plain).foregroundColor(Theme.accent)
+
                     Spacer()
+
+                    Picker(loc.t("类型", "Type"), selection: $typeFilter) {
+                        Text(loc.t("全部", "All")).tag(String?.none)
+                        ForEach(availableTypes, id: \.self) { type in
+                            Text(type).tag(String?.some(type))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .frame(maxWidth: 160)
                 }
                 .padding(.horizontal, 14).padding(.vertical, 8)
 
                 Divider()
 
-                ForEach(Array(artifacts.enumerated()), id: \.element.id) { index, artifact in
+                ForEach(Array(filteredArtifacts.enumerated()), id: \.element.id) { index, artifact in
                     artifactRow(artifact)
-                    if index < artifacts.count - 1 {
+                    if index < filteredArtifacts.count - 1 {
                         Divider().padding(.leading, 50)
                     }
                 }
@@ -276,12 +311,23 @@ struct PurgeView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(artifact.projectName)
                     .font(.system(size: 13, weight: .medium)).lineLimit(1)
-                Text("\(artifact.artifactType) · \(artifact.url.deletingLastPathComponent().lastPathComponent)")
+                // Full path relative to home, so users can tell multiple
+                // same-named artifacts (e.g. several node_modules) apart.
+                Text(displayPath(artifact.url))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(.secondary).lineLimit(1).truncationMode(.middle)
             }
 
             Spacer(minLength: 8)
+
+            // Age label: warns the user when an artifact was modified
+            // recently (active build). Matches the CLI's age display.
+            Text(artifact.ageLabel)
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundColor(artifact.isRecent ? .orange : .secondary)
+                .help(artifact.isRecent
+                      ? loc.t("最近修改（\(artifact.ageDays) 天内），可能正在使用", "Recently modified (within \(artifact.ageDays) days), may be in use")
+                      : loc.t("\(artifact.ageDays) 天未修改", "Last modified \(artifact.ageDays) days ago"))
 
             Text(artifact.sizeText)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -294,6 +340,17 @@ struct PurgeView: View {
             if isSelected { selectedIDs.remove(artifact.id) }
             else { selectedIDs.insert(artifact.id) }
         }
+    }
+
+    /// Returns a display-friendly path: `~/`-prefixed relative to home,
+    /// so long absolute paths stay readable in the row.
+    private func displayPath(_ url: URL) -> String {
+        let home = NSHomeDirectory()
+        let path = url.path
+        if path.hasPrefix(home + "/") {
+            return "~" + path.dropFirst(home.count)
+        }
+        return path
     }
 
     private func iconForType(_ type: String) -> String {
@@ -371,29 +428,28 @@ struct PurgeView: View {
         guard !toDelete.isEmpty else { return }
 
         phase = .running
-        let fm = FileManager.default
+        progressDone = 0
+        progressTotal = toDelete.count
+
+        // Use PurgeDeleter which routes through the Trash (recoverable),
+        // checks protected paths, and writes an operation log. This
+        // matches the CLI's mole_delete safety contract.
+        let outcomes = PurgeDeleter.trashArtifacts(toDelete) { done in
+            progressDone = done
+        }
+
         var deletedCount = 0
         var freedBytes: Int64 = 0
         var errors: [String] = []
+        var failedIDs: Set<String> = []
 
-        for artifact in toDelete {
-            let home = NSHomeDirectory()
-            guard artifact.url.path.hasPrefix(home) else {
-                errors.append("\(artifact.displayName): outside home")
-                continue
-            }
-
-            guard PurgeScanner.artifactPatterns.contains(artifact.artifactType) else {
-                errors.append("\(artifact.displayName): unknown type")
-                continue
-            }
-
-            do {
-                try fm.removeItem(at: artifact.url)
+        for outcome in outcomes {
+            if outcome.success {
                 deletedCount += 1
-                freedBytes += artifact.sizeBytes
-            } catch {
-                errors.append("\(artifact.displayName): \(error.localizedDescription)")
+                freedBytes += outcome.artifact.sizeBytes
+            } else {
+                failedIDs.insert(outcome.artifact.id)
+                errors.append("\(outcome.artifact.displayName): \(outcome.message)")
             }
         }
 
@@ -401,8 +457,8 @@ struct PurgeView: View {
         if errors.isEmpty {
             deleteResult = DeleteResult(
                 success: true,
-                message: loc.t("已删除 \(deletedCount) 个项目，释放 \(ByteFormatter.bytes(freedBytes))。",
-                               "Deleted \(deletedCount) artifacts, freed \(ByteFormatter.bytes(freedBytes))."),
+                message: loc.t("已将 \(deletedCount) 个项目移至废纸篓，释放 \(ByteFormatter.bytes(freedBytes))。",
+                               "Moved \(deletedCount) artifacts to Trash, freed \(ByteFormatter.bytes(freedBytes))."),
                 deletedCount: deletedCount,
                 freedBytes: freedBytes
             )
@@ -410,16 +466,15 @@ struct PurgeView: View {
             let errMsg = errors.joined(separator: "; ")
             deleteResult = DeleteResult(
                 success: deletedCount > 0,
-                message: loc.t("删除 \(deletedCount) 项，\(errors.count) 项失败：\(errMsg)",
-                               "Deleted \(deletedCount), \(errors.count) failed: \(errMsg)"),
+                message: loc.t("移至废纸篓 \(deletedCount) 项，\(errors.count) 项失败：\(errMsg)",
+                               "Moved \(deletedCount) to Trash, \(errors.count) failed: \(errMsg)"),
                 deletedCount: deletedCount,
                 freedBytes: freedBytes
             )
         }
 
-        let failedIDs = Set(toDelete.filter { artifact in
-            errors.contains { $0.hasPrefix(artifact.displayName) }
-        }.map { $0.id })
+        // Remove successfully-deleted artifacts from the list; keep
+        // failed ones so the user can see what didn't get cleaned.
         artifacts.removeAll { selectedIDs.contains($0.id) && !failedIDs.contains($0.id) }
         selectedIDs.removeAll()
     }
@@ -429,6 +484,9 @@ struct PurgeView: View {
         selectedIDs.removeAll()
         scanError = nil
         deleteResult = nil
+        typeFilter = nil
+        progressDone = 0
+        progressTotal = 0
         phase = .idle
     }
 }

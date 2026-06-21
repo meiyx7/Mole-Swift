@@ -37,6 +37,18 @@ A native macOS SwiftUI frontend for the Mole CLI. Provides a clean graphical int
 
 ## 版本记录 / Changelog
 
+### v1.5.9
+
+- 清理项目模块全面对齐 CLI 安全策略与扫描范围
+- 扫描目标从 13 个对齐到 CLI 的 34 个（补齐 .next/.nuxt/.dart_tool/.expo 等前端/移动端产物）
+- 搜索路径对齐 CLI 9 个默认路径，并支持读取 ~/.config/mole/purge_paths 用户配置
+- 扫描深度从 3 提升到 6，与 CLI 一致；新增项目容器识别（package.json/Cargo.toml/.git 等指标），避免误扫非项目目录
+- 新增 MIN_AGE_DAYS=7 年龄保护：7 天内修改的产物标记为"最近"（橙色），提示可能正在使用
+- 删除改走废纸篓（FileManager.trashItem），可恢复，与 CLI mole_delete 安全契约一致；不再直接 rm
+- 新增保护路径检查：~/Library、~/Documents、~/Desktop 等系统/用户数据目录永不清理
+- 新增操作日志：每次清理写入 ~/Library/Logs/MoleApp/purge.log，可审计
+- UI 增强：显示完整路径（~/ 前缀）、年龄标签、按类型筛选、清理进度（N/M）
+
 ### v1.5.8
 
 - 修复 v1.5.7 构建失败：UpdateChecker 的 relaunch 用 `getpid()` 替代 `ProcessInfo.processInfo`（后者在 @MainActor 隔离下解析异常）
