@@ -337,9 +337,7 @@ struct AnalyzeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header(result)
-                if !vm.isOverview {
-                    breadcrumbBar
-                }
+                breadcrumbBar
                 summaryRow(result)
                 tabPicker
                 switch vm.tab {
