@@ -34,10 +34,38 @@ struct TreemapView: View {
     let contextMenu: (AnalyzeEntry) -> AnyView
 
     @State private var hoveredPath: String?
+    /// Captured container size. GeometryReader inside a ScrollView/VStack
+    /// does not reliably receive the parent width (it can collapse to 0,
+    /// which makes the treemap render as one or two tiny blocks). We
+    /// capture the size via a background GeometryReader and store it here,
+    /// then lay out the treemap from this stored value.
+    @State private var containerSize: CGSize = .zero
 
     var body: some View {
-        GeometryReader { geo in
-            let blocks = layout(entries: entries, in: geo.size)
+        // Layer 1: an invisible background that captures the available size.
+        // Color.clear expands to fill the parent, and the GeometryReader in
+        // its background reports the actual width/height the parent granted.
+        Color.clear
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear { containerSize = geo.size }
+                        .onChange(of: geo.size) { newSize in containerSize = newSize }
+                }
+            )
+            .overlay {
+                // Layer 2: the actual treemap, laid out from the captured size.
+                treemapContent
+            }
+            .frame(minHeight: 280)
+            .background(Color(nsColor: .textBackgroundColor).opacity(0.4))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    @ViewBuilder
+    private var treemapContent: some View {
+        if containerSize.width > 0 && containerSize.height > 0 {
+            let blocks = layout(entries: entries, in: containerSize)
             ZStack(alignment: .topLeading) {
                 // Visual layer: Canvas for fast rect rendering.
                 Canvas { ctx, _ in
@@ -47,7 +75,6 @@ struct TreemapView: View {
                 }
 
                 // Interaction layer: one transparent rect per block.
-                // Each handles hover + click + context menu independently.
                 ForEach(blocks, id: \.entry.path) { block in
                     hitTestRect(for: block)
                 }
@@ -55,13 +82,10 @@ struct TreemapView: View {
                 // Tooltip overlay (non-hit-testing).
                 if let path = hoveredPath,
                    let block = blocks.first(where: { $0.entry.path == path }) {
-                    tooltip(for: block, in: geo.size)
+                    tooltip(for: block, in: containerSize)
                 }
             }
         }
-        .frame(minHeight: 280)
-        .background(Color(nsColor: .textBackgroundColor).opacity(0.4))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     // MARK: - Hit-test layer

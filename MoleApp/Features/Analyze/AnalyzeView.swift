@@ -566,7 +566,8 @@ struct AnalyzeView: View {
                     AnyView(treemapContextMenu(for: entry))
                 }
             )
-            .frame(height: 320)
+            .frame(maxWidth: .infinity)
+            .frame(height: 340)
             topEntriesList(result)
         }
     }
