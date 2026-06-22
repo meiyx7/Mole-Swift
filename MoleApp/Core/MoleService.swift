@@ -161,13 +161,10 @@ final class MoleService: ObservableObject {
         args.append(contentsOf: apps)
         var options = CLIOptions()
         options.nonInteractive = true
-        // Don't auto-answer "y" for uninstall. The CLI checks
-        // MOLE_NON_INTERACTIVE and skips its own confirmation prompt.
-        // If we pipe "y" here, the CLI commits to the uninstall before
-        // the macOS sudo dialog appears; cancelling the password would
-        // still leave the app trashed. With noAutoConfirm, if sudo is
-        // cancelled the CLI aborts with a non-zero exit code.
-        options.noAutoConfirm = true
+        // MOLE_NON_INTERACTIVE=1 alone is sufficient: the CLI checks that
+        // env var and skips its own confirmation prompt. Stdin is /dev/null
+        // so if the macOS sudo dialog is cancelled, the CLI aborts with a
+        // non-zero exit code instead of auto-yesing.
         return try await CLIBridge.runStreaming(args, options: options, onLine: onLine)
     }
 

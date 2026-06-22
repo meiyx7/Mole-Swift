@@ -10,11 +10,6 @@ struct CLIOptions {
     /// non-interactive code paths. This is how the GUI drives `clean`,
     /// `optimize`, `purge`, and `installer` without a TTY.
     var nonInteractive: Bool = true
-    /// When true, suppresses the "y\n" auto-confirm pipe so that the CLI
-    /// aborts if the user cancels the macOS sudo auth dialog. Used for
-    /// `uninstall` where `MOLE_NON_INTERACTIVE=1` alone is sufficient
-    /// (the CLI checks that env var and skips its own confirmation prompt).
-    var noAutoConfirm: Bool = false
     /// Optional timeout in seconds. If the command doesn't finish within
     /// this duration, it will be terminated. nil means no timeout.
     var timeout: TimeInterval? = nil
@@ -305,8 +300,6 @@ enum CLIBridge {
         // Read pipes concurrently to avoid deadlock when buffer fills up.
         var stdoutData = Data()
         var stderrData = Data()
-        let outSemaphore = DispatchSemaphore(value: 0)
-        let errSemaphore = DispatchSemaphore(value: 0)
 
         outPipe.fileHandleForReading.readabilityHandler = { handle in
             stdoutData.append(handle.availableData)
@@ -345,12 +338,15 @@ enum CLIBridge {
             process.waitUntilExit()
         }
 
-        // Give readability handlers time to drain remaining data.
-        Thread.sleep(forTimeInterval: 0.05)
+        // Detach readability handlers and drain any remaining buffered data.
+        // Setting readabilityHandler to nil stops the async callbacks; we then
+        // read whatever is still in the pipe buffer synchronously. This
+        // replaces the previous fixed Thread.sleep(0.05) which added 50ms
+        // latency to every captured JSON command (status/analyze/history).
         outPipe.fileHandleForReading.readabilityHandler = nil
         errPipe.fileHandleForReading.readabilityHandler = nil
-        outSemaphore.signal()
-        errSemaphore.signal()
+        stdoutData.append(outPipe.fileHandleForReading.readDataToEndOfFile())
+        stderrData.append(errPipe.fileHandleForReading.readDataToEndOfFile())
 
         if let taskID {
             unregisterStreaming(taskID: taskID)
@@ -369,9 +365,7 @@ enum CLIBridge {
     /// unexpected prompt — including from an upstream CLI that ignores the
     /// env var — hits EOF and fails safely instead of being auto-confirmed.
     /// Auto-yesing a destructive prompt the user never saw is the failure
-    /// mode this guard exists to prevent. This applies to all nonInteractive
-    /// paths; the legacy `noAutoConfirm` flag is now a no-op kept only for
-    /// source compatibility with callers that still set it.
+    /// mode this guard exists to prevent.
     private static func nonInteractiveStdin() -> FileHandle {
         return FileHandle(forReadingAtPath: "/dev/null") ?? {
             // Fallback: a closed pipe also yields EOF.

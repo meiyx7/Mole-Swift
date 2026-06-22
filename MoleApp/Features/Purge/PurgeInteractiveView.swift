@@ -150,11 +150,9 @@ struct PurgeInteractiveView: View {
     @EnvironmentObject private var loc: Localization
     @StateObject private var runner = PurgeInteractiveRunner()
     @State private var selected: Set<Int> = []
-    @State private var phase: Phase = .idle
+    @State private var phase: CleanupPhase = .idle
     @State private var showConfirm = false
     @State private var showCategories = true
-
-    private enum Phase: Equatable { case idle, scanning, scanned, running, done, error }
 
     var body: some View {
         if !service.isInstalled {
@@ -209,8 +207,8 @@ struct PurgeInteractiveView: View {
         HStack(spacing: 10) {
             StepDot(n: 1, label: loc.t("扫描", "Scan"),
                     active: phase == .idle || phase == .scanning,
-                    done: phaseIsAfterScan)
-            StepConnector(active: phaseIsAfterScan)
+                    done: phase.isAfterScan)
+            StepConnector(active: phase.isAfterScan)
             StepDot(n: 2, label: loc.t("查看", "Review"),
                     active: phase == .scanned,
                     done: phase == .running || phase == .done || phase == .error)
@@ -221,10 +219,6 @@ struct PurgeInteractiveView: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    private var phaseIsAfterScan: Bool {
-        phase == .scanned || phase == .running || phase == .done || phase == .error
     }
 
     // MARK: - Idle hero card

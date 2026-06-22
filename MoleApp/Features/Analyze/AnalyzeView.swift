@@ -18,9 +18,10 @@ final class AnalyzeViewModel: ObservableObject {
     /// Filter text for the breakdown list. Mirrors the TUI's `/` filter.
     @Published var entryFilter: String = ""
 
-    /// Active tab: breakdown / large files.
+    /// Active tab: breakdown / treemap / large files.
     enum Tab: String, CaseIterable, Identifiable {
         case breakdown
+        case treemap
         case largeFiles
         var id: String { rawValue }
     }
@@ -344,6 +345,8 @@ struct AnalyzeView: View {
                 case .breakdown:
                     filterBar
                     entriesSection(result)
+                case .treemap:
+                    treemapSection(result)
                 case .largeFiles:
                     largeFilesSection(result.largeFiles ?? [])
                 }
@@ -488,6 +491,10 @@ struct AnalyzeView: View {
                       label: loc.t("明细", "Breakdown"),
                       icon: "list.bullet",
                       count: vm.result?.entries.count)
+            tabButton(.treemap,
+                      label: loc.t("可视化", "Treemap"),
+                      icon: "square.grid.2x2.fill",
+                      count: nil)
             tabButton(.largeFiles,
                       label: loc.t("大文件", "Large Files"),
                       icon: "doc.text.magnifyingglass",
@@ -629,8 +636,8 @@ struct AnalyzeView: View {
         let tone: StatusTone = (entry.cleanable ?? false) ? .good : ((entry.insight ?? false) ? .warn : .neutral)
         let isSelected = vm.selectedPaths.contains(entry.path)
         return HStack(spacing: 10) {
-            // Selection checkbox (P0). Click toggles selection without
-            // drilling, so the user can batch-select cleanable dirs.
+            // Selection checkbox. Click toggles selection without drilling,
+            // so the user can batch-select cleanable dirs.
             Button {
                 if isSelected { vm.selectedPaths.remove(entry.path) }
                 else { vm.selectedPaths.insert(entry.path) }
@@ -724,6 +731,58 @@ struct AnalyzeView: View {
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Theme.color(for: tone).opacity(0.18), in: Capsule())
             .foregroundColor(Theme.color(for: tone))
+    }
+
+    // MARK: - Treemap (squarified layout, click to drill)
+
+    /// Treemap visualization of the current directory's entries. Clicking a
+    /// directory block drills into it (same as clicking a row in the
+    /// breakdown list). Top 10 entries shown by size; the rest aggregated
+    /// into an "Other" block.
+    @ViewBuilder
+    private func treemapSection(_ result: AnalyzeResult) -> some View {
+        Card(padding: 10) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label(loc.t("可视化", "Treemap"), systemImage: "square.grid.2x2.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    Text(loc.t("点击块进入子目录", "Click a block to drill in"))
+                        .font(.system(size: 10)).foregroundColor(.secondary)
+                }
+                if result.entries.isEmpty {
+                    Text(loc.t("空目录", "Empty directory"))
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 120)
+                } else {
+                    TreemapView(
+                        entries: result.entries,
+                        totalSize: result.totalSize,
+                        onDrill: { entry in
+                            if entry.isDir && !vm.isLoading {
+                                Task { await vm.drill(service: service, into: entry.path, name: entry.name) }
+                            }
+                        },
+                        contextMenu: { entry in
+                            AnyView(
+                                Group {
+                                    Button {
+                                        revealInFinder(entry.path)
+                                    } label: {
+                                        Label(loc.t("在 Finder 中显示", "Reveal in Finder"), systemImage: "folder")
+                                    }
+                                    Button {
+                                        copyPath(entry.path)
+                                    } label: {
+                                        Label(loc.t("复制路径", "Copy Path"), systemImage: "doc.on.doc")
+                                    }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+        }
     }
 
     // MARK: - Large files (P2: full list, selectable, with actions)

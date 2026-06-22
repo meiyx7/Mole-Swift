@@ -3,7 +3,7 @@ import SwiftUI
 struct PurgeView: View {
     @EnvironmentObject private var service: MoleService
     @EnvironmentObject private var loc: Localization
-    @State private var phase: Phase = .idle
+    @State private var phase: CleanupPhase = .idle
     @State private var artifacts: [PurgeScanner.FoundArtifact] = []
     @State private var selectedIDs: Set<String> = []
     @State private var showConfirm = false
@@ -13,8 +13,15 @@ struct PurgeView: View {
     @State private var progressTotal = 0
     /// Optional type filter. nil = show all. Bound to the filter Picker.
     @State private var typeFilter: String?
+    /// True when the last scan fell back to the local Swift scanner.
+    /// Shown as a subtle hint so the user knows the CLI scan failed.
+    @State private var usedFallback = false
+    @State private var fallbackReason: String?
+    /// Configured purge scan paths, loaded from `~/.config/mole/purge_paths`.
+    /// Empty when the file doesn't exist (CLI falls back to defaults).
+    @State private var configuredScanPaths: [String] = []
+    @State private var usingDefaultPaths = true
 
-    private enum Phase: Equatable { case idle, scanning, scanned, running, done, error }
     private struct DeleteResult: Identifiable {
         let id = UUID()
         let success: Bool
@@ -47,6 +54,7 @@ struct PurgeView: View {
                     header
                     stepGuide
                     categoriesCard
+                    scanPathsCard
                     if phase == .scanned {
                         artifactsList
                     } else if phase == .scanning {
@@ -63,6 +71,7 @@ struct PurgeView: View {
             }
             .featurePadding()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .task { loadScanPaths() }
             .alert(loc.t("清理选中的项目？", "Purge selected artifacts?"),
                    isPresented: $showConfirm) {
                 Button(loc.t("取消", "Cancel"), role: .cancel) {}
@@ -145,8 +154,8 @@ struct PurgeView: View {
 
     private var stepGuide: some View {
         HStack(spacing: 10) {
-            StepDot(n: 1, label: loc.t("扫描", "Scan"), active: phase == .idle || phase == .scanning, done: phase != .idle && phase != .scanning)
-            StepConnector(active: phase != .idle && phase != .scanning)
+            StepDot(n: 1, label: loc.t("扫描", "Scan"), active: phase == .idle || phase == .scanning, done: phase.isAfterScan)
+            StepConnector(active: phase.isAfterScan)
             StepDot(n: 2, label: loc.t("选择", "Select"), active: phase == .scanned, done: phase == .running || phase == .done)
             StepConnector(active: phase == .running || phase == .done)
             StepDot(n: 3, label: loc.t("清理", "Purge"), active: phase == .running, done: phase == .done)
@@ -182,6 +191,139 @@ struct PurgeView: View {
                 Text(detail).font(.system(size: 10)).foregroundColor(.secondary)
             }
             Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - Scan paths config card
+
+    /// Shows the purge scan paths from `~/.config/mole/purge_paths` so the
+    /// user knows which directories `mo purge` will search. Provides a
+    /// "Reveal Config" button to open the file in Finder for editing,
+    /// mirroring `mo purge --paths` which opens `$EDITOR`.
+    private var scanPathsCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label(loc.t("扫描路径配置", "Scan Path Config"), systemImage: "folder.badge.gearshape")
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    if usingDefaultPaths {
+                        Text(loc.t("默认路径", "Default paths"))
+                            .font(.system(size: 10, weight: .medium))
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Color.gray.opacity(0.18), in: Capsule())
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text(loc.t("自定义路径", "Custom paths"))
+                            .font(.system(size: 10, weight: .medium))
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Theme.accent.opacity(0.18), in: Capsule())
+                            .foregroundColor(Theme.accent)
+                    }
+                }
+
+                if configuredScanPaths.isEmpty {
+                    Text(loc.t(
+                        "未找到配置文件，将使用默认路径扫描。",
+                        "No config file found; will scan default paths."
+                    ))
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(configuredScanPaths, id: \.self) { path in
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(.secondary)
+                                Text(path)
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                        }
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Button {
+                        revealConfigFile()
+                    } label: {
+                        Label(loc.t("编辑配置", "Edit Config"), systemImage: "pencil")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.bordered)
+
+                    if !usingDefaultPaths {
+                        Button {
+                            Task { await reloadAfterEdit() }
+                        } label: {
+                            Label(loc.t("重新加载", "Reload"), systemImage: "arrow.clockwise")
+                                .font(.system(size: 11))
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Reads `~/.config/mole/purge_paths` and parses non-comment, non-blank
+    /// lines. Sets `usingDefaultPaths` to false when the file has at least
+    /// one valid path entry.
+    private func loadScanPaths() {
+        let configURL = URL(fileURLWithPath: NSString(string: "~/.config/mole/purge_paths").expandingTildeInPath)
+        guard let content = try? String(contentsOf: configURL, encoding: .utf8) else {
+            configuredScanPaths = []
+            usingDefaultPaths = true
+            return
+        }
+        let paths = content
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+            .map { line -> String in
+                // Expand ~ to home, matching the CLI's mole_purge_read_paths_config
+                if line.hasPrefix("~") {
+                    return NSString(string: line).expandingTildeInPath
+                }
+                return line
+            }
+            .map { path -> String in
+                // Show as ~/path for readability
+                let home = NSHomeDirectory()
+                if path.hasPrefix(home + "/") {
+                    return "~" + path.dropFirst(home.count)
+                }
+                return path
+            }
+        configuredScanPaths = paths
+        usingDefaultPaths = paths.isEmpty
+    }
+
+    private func revealConfigFile() {
+        let configPath = NSString(string: "~/.config/mole/purge_paths").expandingTildeInPath
+        let configURL = URL(fileURLWithPath: configPath)
+        // If the file doesn't exist, reveal the parent directory so the
+        // user can create it. The CLI's `mo purge --paths` creates a
+        // template on first run; here we just point the user to the
+        // config location.
+        if FileManager.default.fileExists(atPath: configPath) {
+            NSWorkspace.shared.activateFileViewerSelecting([configURL])
+        } else {
+            let dirURL = configURL.deletingLastPathComponent()
+            // Create the directory if needed so Finder can open it
+            try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(dirURL)
+        }
+    }
+
+    private func reloadAfterEdit() async {
+        loadScanPaths()
+        // If the user edited paths and is in idle/error state, offer to
+        // rescan. Don't auto-trigger if already scanning or has results.
+        if phase == .idle || phase == .error {
+            await scanArtifacts()
         }
     }
 
@@ -238,6 +380,16 @@ struct PurgeView: View {
                 HStack {
                     Text(loc.t("\(filteredArtifacts.count) 个构建产物", "\(filteredArtifacts.count) artifacts"))
                         .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
+                    if usedFallback {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 9))
+                            .foregroundColor(.orange)
+                            .help(fallbackReason.map {
+                                loc.t("CLI 扫描失败，已降级到本地扫描：\($0)",
+                                      "CLI scan failed, fell back to local scan: \($0)")
+                            } ?? loc.t("CLI 扫描失败，已降级到本地扫描",
+                                       "CLI scan failed, fell back to local scan"))
+                    }
                     Spacer()
                     if !selectedIDs.isEmpty {
                         Text(loc.t("可回收 \(ByteFormatter.bytes(totalSelectedSize))", "Reclaim \(ByteFormatter.bytes(totalSelectedSize))"))
@@ -408,10 +560,15 @@ struct PurgeView: View {
         scanError = nil
         deleteResult = nil
         selectedIDs.removeAll()
+        usedFallback = false
+        fallbackReason = nil
 
-        let found = await Task.detached(priority: .userInitiated) {
-            PurgeScanner.scan()
-        }.value
+        // 默认走 CLI 扫描（mo purge --dry-run），消除与 CLI 的 34 个 target /
+        // 9 个搜索路径的手动同步负担。CLI 不可用或解析失败时降级到本地扫描。
+        let result = await CLIPurgeScanner.scan(useFallback: true)
+        let found = result.artifacts.map { $0.asPurgeArtifact() }
+        usedFallback = result.usedFallback
+        fallbackReason = result.fallbackReason
 
         if found.isEmpty {
             phase = .error
