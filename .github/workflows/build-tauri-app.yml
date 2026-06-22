@@ -2,7 +2,7 @@ name: Build Tauri App
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/tauri-gui]
     paths: ['MoleTauri/**']
   pull_request:
     paths: ['MoleTauri/**']
