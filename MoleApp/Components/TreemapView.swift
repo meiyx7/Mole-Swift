@@ -17,13 +17,12 @@ struct TreemapView: View {
         GeometryReader { geo in
             recomputBlocks(size: geo.size)
 
-            ZStack {
-                Canvas { ctx, _ in
-                    for block in blocks {
-                        drawBlock(ctx: ctx, block: block)
-                    }
+            Canvas { ctx, _ in
+                for block in blocks {
+                    drawBlock(ctx: ctx, block: block)
                 }
-
+            }
+            .overlay(
                 Color.clear
                     .contentShape(Rectangle())
                     .onContinuousHover { phase in
@@ -44,7 +43,8 @@ struct TreemapView: View {
                                 }
                             }
                     )
-
+            )
+            .overlay(alignment: .topLeading) {
                 if let path = hoveredPath,
                    let block = blocks.first(where: { $0.entry.path == path }) {
                     tooltip(for: block, in: geo.size)
