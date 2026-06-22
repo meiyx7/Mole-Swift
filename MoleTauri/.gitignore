@@ -3,3 +3,4 @@ dist/
 target/
 *.dmg
 *.app
+src-tauri/gen/
