@@ -9,21 +9,7 @@ struct CommandOutput {
 }
 
 fn run_mo(args: &[&str]) -> CommandOutput {
-    let mo_path = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join("mo")))
-        .unwrap_or_else(|| {
-            // Try common install locations
-            let home = std::env::var("HOME").unwrap_or_default();
-            std::path::PathBuf::from(format!("{}/.local/bin/mo", home))
-        });
-
-    let output = if mo_path.exists() {
-        Command::new(&mo_path).args(args).output()
-    } else {
-        // Fallback: try PATH
-        Command::new("mo").args(args).output()
-    };
+    let output = Command::new("mo").args(args).output();
 
     match output {
         Ok(o) => CommandOutput {
@@ -50,7 +36,10 @@ fn run_clean(dry_run: bool, verbose: bool) -> CommandOutput {
 #[tauri::command]
 fn run_analyze(path: Option<String>) -> CommandOutput {
     let mut args = vec!["analyze", "--json"];
-    if let Some(p) = path { args.push(&p); }
+    let path_str = path.unwrap_or_default();
+    if !path_str.is_empty() {
+        args.push(&path_str);
+    }
     run_mo(&args)
 }
 
@@ -90,11 +79,6 @@ fn run_installer(dry_run: bool) -> CommandOutput {
 }
 
 #[tauri::command]
-fn run_analyze_drill(path: String) -> CommandOutput {
-    run_mo(&["analyze", "--json", &path])
-}
-
-#[tauri::command]
 fn get_mole_version() -> CommandOutput {
     run_mo(&["--version"])
 }
@@ -114,7 +98,7 @@ fn copy_to_clipboard(text: String) {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             run_clean,
@@ -124,7 +108,6 @@ pub fn run() {
             run_uninstall,
             run_purge,
             run_installer,
-            run_analyze_drill,
             get_mole_version,
             open_finder,
             copy_to_clipboard,
