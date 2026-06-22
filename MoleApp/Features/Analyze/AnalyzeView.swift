@@ -353,13 +353,6 @@ struct AnalyzeView: View {
                     deleteResultBanner(summary)
                 }
             }
-            .overlay(alignment: .top) {
-                if vm.isLoading {
-                    scanProgressBar
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
-                }
-            }
             .overlay {
                 if vm.deleteInProgress {
                     ZStack {
@@ -497,6 +490,16 @@ struct AnalyzeView: View {
                       label: loc.t("明细", "Breakdown"),
                       icon: "list.bullet",
                       count: vm.result?.entries.count)
+            if vm.isLoading {
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.mini)
+                    Text(vm.scanPath)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                        .frame(maxWidth: 120)
+                }
+            }
             tabButton(.largeFiles,
                       label: loc.t("大文件", "Large Files"),
                       icon: "doc.text.magnifyingglass",
