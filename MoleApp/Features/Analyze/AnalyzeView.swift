@@ -341,9 +341,6 @@ struct AnalyzeView: View {
                     breadcrumbBar
                 }
                 summaryRow(result)
-                if vm.isLoading {
-                    scanProgressBar
-                }
                 tabPicker
                 switch vm.tab {
                 case .breakdown:
@@ -354,6 +351,13 @@ struct AnalyzeView: View {
                 }
                 if let summary = vm.deleteResult {
                     deleteResultBanner(summary)
+                }
+            }
+            .overlay(alignment: .top) {
+                if vm.isLoading {
+                    scanProgressBar
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
                 }
             }
             .overlay {
