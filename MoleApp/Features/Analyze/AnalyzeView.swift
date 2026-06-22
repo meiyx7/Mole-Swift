@@ -18,17 +18,13 @@ final class AnalyzeViewModel: ObservableObject {
     /// Filter text for the breakdown list. Mirrors the TUI's `/` filter.
     @Published var entryFilter: String = ""
 
-    /// Active tab: overview (treemap) / breakdown / large files.
-    /// Overview is the default first screen — the treemap gives an
-    /// instant visual sense of relative sizes that a list cannot.
-    /// Breakdown and large files remain for precise inspection.
+    /// Active tab: breakdown / large files.
     enum Tab: String, CaseIterable, Identifiable {
-        case overview
         case breakdown
         case largeFiles
         var id: String { rawValue }
     }
-    @Published var tab: Tab = .overview
+    @Published var tab: Tab = .breakdown
 
     /// Delete flow state.
     @Published var deleteInProgress = false
@@ -112,7 +108,7 @@ final class AnalyzeViewModel: ObservableObject {
         selectedPaths.removeAll()
         largeSelectedPaths.removeAll()
         entryFilter = ""
-        tab = .overview
+        tab = .breakdown
     }
 
     private func fetch(service: MoleService, path: String?) async {
@@ -350,8 +346,6 @@ struct AnalyzeView: View {
                 }
                 tabPicker
                 switch vm.tab {
-                case .overview:
-                    treemapSection(result)
                 case .breakdown:
                     filterBar
                     entriesSection(result)
@@ -495,10 +489,6 @@ struct AnalyzeView: View {
 
     private var tabPicker: some View {
         HStack(spacing: 6) {
-            tabButton(.overview,
-                      label: loc.t("概览", "Overview"),
-                      icon: "square.grid.2x2",
-                      count: nil)
             tabButton(.breakdown,
                       label: loc.t("明细", "Breakdown"),
                       icon: "list.bullet",
@@ -543,156 +533,6 @@ struct AnalyzeView: View {
                         in: RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
-    }
-
-    // MARK: - Treemap overview (方案 A)
-
-    /// Treemap overview section: the squarified treemap plus a compact
-    /// legend and a Top-5 list. The treemap gives instant visual sense of
-    /// relative sizes; the Top-5 list anchors it with precise numbers for
-    /// the biggest items. Clicking a dir block drills in; right-click
-    /// reuses the row context menu.
-    @ViewBuilder
-    private func treemapSection(_ result: AnalyzeResult) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            treemapLegend
-            TreemapView(
-                entries: result.entries,
-                totalSize: result.totalSize,
-                onDrill: { entry in
-                    Task { await vm.drill(service: service, into: entry.path, name: entry.name) }
-                },
-                contextMenu: { entry in
-                    AnyView(treemapContextMenu(for: entry))
-                }
-            )
-            .frame(maxWidth: .infinity)
-            .frame(height: 420)
-            topEntriesList(result)
-        }
-    }
-
-    /// Colour legend explaining the treemap's tone mapping.
-    private var treemapLegend: some View {
-        HStack(spacing: 14) {
-            legendItem(color: Theme.color(for: .good),
-                       label: loc.t("可清理", "Cleanable"))
-            legendItem(color: Theme.color(for: .warn),
-                       label: loc.t("洞察", "Insight"))
-            legendItem(color: Theme.color(for: .neutral),
-                       label: loc.t("普通", "Other"))
-            Spacer(minLength: 0)
-            Text(loc.t("点击目录块可下钻", "Click a dir block to drill in"))
-                .font(.system(size: 10))
-                .foregroundColor(.secondary)
-        }
-        .padding(.horizontal, 4)
-    }
-
-    private func legendItem(color: Color, label: String) -> some View {
-        HStack(spacing: 5) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(color.opacity(0.6))
-                .frame(width: 12, height: 12)
-            Text(label).font(.system(size: 11)).foregroundColor(.secondary)
-        }
-    }
-
-    /// Compact Top-5 list below the treemap. Anchors the visual map with
-    /// precise numbers for the biggest items, and gives a quick path to
-    /// drill in or trash without switching to the Breakdown tab.
-    private func topEntriesList(_ result: AnalyzeResult) -> some View {
-        let top = Array(result.entries.sorted { $0.size > $1.size }.prefix(5))
-        return Card(padding: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(loc.t("Top 5 占用", "Top 5 by size"))
-                        .font(.system(size: 12, weight: .semibold))
-                    Spacer()
-                    Text(loc.t("共 \(result.entries.count) 项", "\(result.entries.count) total"))
-                        .font(.system(size: 10)).foregroundColor(.secondary)
-                }
-                .padding(.horizontal, 6).padding(.bottom, 2)
-
-                ForEach(Array(top.enumerated()), id: \.element.id) { idx, entry in
-                    topEntryRow(entry, rank: idx + 1, total: result.totalSize)
-                    if idx < top.count - 1 {
-                        Divider().padding(.horizontal, 6)
-                    }
-                }
-            }
-        }
-    }
-
-    private func topEntryRow(_ entry: AnalyzeEntry, rank: Int, total: Int64) -> some View {
-        let fraction = total > 0 ? Double(entry.size) / Double(total) * 100 : 0
-        return HStack(spacing: 10) {
-            Text("\(rank)")
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundColor(.secondary)
-                .frame(width: 16)
-            Image(systemName: entry.isDir ? "folder.fill" : "doc")
-                .foregroundColor(entry.isDir ? Theme.accent : .secondary)
-                .frame(width: 16)
-            Text(entry.name)
-                .font(.system(size: 12, weight: .medium))
-                .lineLimit(1)
-            if entry.cleanable ?? false {
-                badge(loc.t("可清理", "Cleanable"), tone: .good)
-            } else if entry.insight ?? false {
-                badge(loc.t("洞察", "Insight"), tone: .warn)
-            }
-            Spacer()
-            Text(ByteFormatter.bytes(entry.size))
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-            Text(String(format: "%.1f%%", fraction))
-                .font(.system(size: 11, design: .rounded))
-                .foregroundColor(.secondary)
-                .frame(width: 48, alignment: .trailing)
-            if entry.isDir {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10))
-                    .foregroundColor(Color.gray.opacity(0.5))
-            }
-        }
-        .padding(.horizontal, 6).padding(.vertical, 5)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if entry.isDir {
-                Task { await vm.drill(service: service, into: entry.path, name: entry.name) }
-            }
-        }
-        .contextMenu {
-            treemapContextMenu(for: entry)
-        }
-    }
-
-    /// Context menu shared by treemap blocks and Top-5 rows. Mirrors the
-    /// list view's row context menu (Finder / preview / copy / trash).
-    @ViewBuilder
-    private func treemapContextMenu(for entry: AnalyzeEntry) -> some View {
-        Button {
-            revealInFinder(entry.path)
-        } label: {
-            Label(loc.t("在 Finder 中显示", "Reveal in Finder"), systemImage: "folder")
-        }
-        Button {
-            previewFile(entry.path)
-        } label: {
-            Label(loc.t("预览", "Quick Look"), systemImage: "eye")
-        }
-        Button {
-            copyPath(entry.path)
-        } label: {
-            Label(loc.t("复制路径", "Copy Path"), systemImage: "doc.on.doc")
-        }
-        Divider()
-        Button(role: .destructive) {
-            vm.selectedPaths.insert(entry.path)
-            vm.showDeleteConfirm = true
-        } label: {
-            Label(loc.t("移至废纸篓", "Move to Trash"), systemImage: "trash")
-        }
     }
 
     // MARK: - Filter bar (P2)
