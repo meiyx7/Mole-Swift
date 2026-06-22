@@ -14,7 +14,6 @@ struct TreemapView: View {
     @State private var hoveredPath: String?
     @State private var blocks: [Block] = []
     @State private var lastSize: CGSize = .zero
-    @State private var contextMenuTarget: AnalyzeEntry?
 
     private let gap: CGFloat = 2
     private let cornerRadius: CGFloat = 6
@@ -50,18 +49,6 @@ struct TreemapView: View {
                                 }
                             }
                     )
-                    .onLongPressGesture(minimumDuration: 0.5) { }
-                    onPressingChanged: { pressing in
-                        if pressing, let hovered = hoveredPath,
-                           let block = blocks.first(where: { $0.entry.path == hovered }) {
-                            contextMenuTarget = block.entry
-                        }
-                    }
-                    .contextMenu {
-                        if let target = contextMenuTarget {
-                            contextMenu(target)
-                        }
-                    }
 
                 if let path = hoveredPath,
                    let block = blocks.first(where: { $0.entry.path == path }) {
