@@ -490,16 +490,6 @@ struct AnalyzeView: View {
                       label: loc.t("明细", "Breakdown"),
                       icon: "list.bullet",
                       count: vm.result?.entries.count)
-            if vm.isLoading {
-                HStack(spacing: 4) {
-                    ProgressView().controlSize(.mini)
-                    Text(vm.scanPath)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1).truncationMode(.middle)
-                        .frame(maxWidth: 120)
-                }
-            }
             tabButton(.largeFiles,
                       label: loc.t("大文件", "Large Files"),
                       icon: "doc.text.magnifyingglass",
@@ -595,6 +585,16 @@ struct AnalyzeView: View {
                 HStack {
                     Text(loc.t("明细", "Breakdown"))
                         .font(.system(size: 13, weight: .semibold))
+                    if vm.isLoading {
+                        HStack(spacing: 4) {
+                            ProgressView().controlSize(.mini)
+                            Text(vm.scanPath)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1).truncationMode(.middle)
+                                .frame(maxWidth: 160)
+                        }
+                    }
                     Spacer()
                     if vm.selectedCount() > 0 {
                         Text(loc.t("已选 \(ByteFormatter.bytes(vm.selectedTotalSize()))",
