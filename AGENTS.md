@@ -125,12 +125,39 @@ golangci-lint run ./cmd/...
 
 - The Mac app lives in `MoleApp/`. Build triggers on push to `main` and on `v*` tags via `build-mac-app.yml`.
 - `MARKETING_VERSION` in `MoleApp/project.yml` is the Mac app version (e.g. `1.6.8`).
-- **每次有明显的功能改动、Bug 修复或 UI 变更时，必须：**
-  1. 递增 `MARKETING_VERSION`（patch 版本 +1）
-  2. 提交代码并推送到 `main`
-  3. 打 `v<version>` tag 并推送（触发 GitHub Actions 构建）
 - 版本号格式：`主版本.次版本.补丁`，当前从 `1.6.x` 起步。
 - 文档或注释修改不需要升版本号。
+
+### 提交、推送、构建的固定流程
+
+每次有功能改动、Bug 修复或 UI 变更时，必须按以下步骤执行：
+
+1. **修改代码**
+2. **递增 `MARKETING_VERSION`**（patch 版本 +1）在 `MoleApp/project.yml`
+3. **提交代码**：`git add <files> && git commit -m "<message>"`
+4. **推送到 main**：`git push origin main`
+5. **打 tag**：`git tag v<version>`（**小写 v**，大写 V 是 CLI release workflow）
+6. **推送 tag**：`git push origin v<version>`
+7. **等待构建完成**：通过 API 检查构建状态，**不要跳过这一步**
+   ```bash
+   # 等待 15-20 秒后开始轮询
+   curl -s "https://api.github.com/repos/meiyx7/Mole-Swift/actions/runs?per_page=3" | python3 -c "
+   import sys, json
+   data = json.load(sys.stdin)
+   for r in data.get('workflow_runs', []):
+       if r['name'] == 'Build macOS App':
+           print(f'{r[\"conclusion\"] or r[\"status\"]} | {r[\"head_sha\"][:7]}')
+           break"
+   ```
+8. **如果构建失败**：查看构建日志，修复编译错误，重新从步骤 2 开始
+9. **如果构建成功**：完成
+
+### 关键注意事项
+
+- **tag 用小写 v**（`v1.7.14`），大写 V（`V1.7.14`）是 CLI release workflow
+- **不要在没有构建验证的情况下结束任务**
+- **API 速率限制**：GitHub API 有每小时 60 次未认证请求限制，密集轮询会触发限制，等 1-2 分钟后重试
+- **SwiftUI Canvas + `onContinuousHover` 在 CI 上可能编译失败**，优先使用纯 SwiftUI 视图方案
 
 ## GitHub Operations
 
