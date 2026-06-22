@@ -198,13 +198,16 @@ struct TreemapView: View {
         let isHovered = block.entry.path == hoveredPath
         let baseColor = Theme.color(for: block.tone)
 
+        // LinearGradient conforms to GraphicsContext.Shading, so it can be
+        // passed directly to ctx.fill(with:). No need for .linearGradient()
+        // wrapper (that overload expects a Gradient + explicit endpoints).
         let fill = LinearGradient(
             colors: [baseColor.opacity(isHovered ? 0.85 : 0.55),
                      baseColor.opacity(isHovered ? 0.65 : 0.35)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
-        ctx.fill(Path(roundedRect: rect.insetBy(dx: 1, dy: 1), cornerRadius: 3), with: .linearGradient(fill))
+        ctx.fill(Path(roundedRect: rect.insetBy(dx: 1, dy: 1), cornerRadius: 3), with: fill)
 
         let borderColor = isHovered ? baseColor : baseColor.opacity(0.4)
         ctx.stroke(Path(roundedRect: rect.insetBy(dx: 1, dy: 1), cornerRadius: 3),
@@ -228,12 +231,15 @@ struct TreemapView: View {
         let metaText = Text("\(sizeStr) · \(pctStr)").font(metaFont).foregroundColor(.secondary)
 
         let inset = rect.insetBy(dx: 6, dy: 4)
-        let nameSize = nameText.resolve(in: inset.size)
-        let metaSize = metaText.resolve(in: inset.size)
+        // Estimate line heights from font size (no reliable Text.measure
+        // in Canvas; line height ≈ 1.2 × font size is a safe approximation).
+        let nameLineHeight = fontSize(for: rect) * 1.2
+        let metaLineHeight = max(9, fontSize(for: rect) - 2) * 1.2
 
         ctx.draw(nameText, at: CGPoint(x: inset.minX, y: inset.minY))
-        if inset.height > nameSize.height + metaSize.height + 4 {
-            ctx.draw(metaText, at: CGPoint(x: inset.minX, y: inset.minY + nameSize.height + 2))
+        // Only draw the meta line if there's room below the name.
+        if inset.height > nameLineHeight + metaLineHeight + 4 {
+            ctx.draw(metaText, at: CGPoint(x: inset.minX, y: inset.minY + nameLineHeight + 2))
         }
     }
 
