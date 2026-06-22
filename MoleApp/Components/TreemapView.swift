@@ -2,14 +2,9 @@ import SwiftUI
 
 /// Squarified treemap layout for disk-usage visualisation.
 ///
-/// Implements the Bruls-Huijsen-van Wijk squarified algorithm (2000),
-/// used by GrandPerspective, DaisyDisk, and SpaceSniffer. Rectangles
-/// with aspect ratios close to 1 make relative sizes immediately
-/// readable — a 12 GB block is visually 200× the area of a 60 MB one.
-///
-/// Architecture: pure SwiftUI views (no Canvas). Each block is a
-/// standalone view with background, text, and gesture handling. This
-/// avoids coordinate-system mismatches between Canvas and SwiftUI.
+/// Architecture: Canvas renders visuals; one transparent overlay handles
+/// all pointer events by mapping coordinates to blocks manually. This
+/// eliminates all coordinate-system mismatches.
 struct TreemapView: View {
     let entries: [AnalyzeEntry]
     let totalSize: Int64
@@ -17,17 +12,56 @@ struct TreemapView: View {
     let contextMenu: (AnalyzeEntry) -> AnyView
 
     @State private var hoveredPath: String?
+    @State private var blocks: [Block] = []
+    @State private var lastSize: CGSize = .zero
+    @State private var contextMenuTarget: AnalyzeEntry?
 
     private let gap: CGFloat = 2
     private let cornerRadius: CGFloat = 6
 
     var body: some View {
         GeometryReader { geo in
-            let blocks = layout(entries: entries, in: geo.size)
+            recomputBlocks(size: geo.size)
+
             ZStack {
-                ForEach(blocks, id: \.entry.path) { block in
-                    blockView(block)
+                Canvas { ctx, _ in
+                    for block in blocks {
+                        drawBlock(ctx: ctx, block: block)
+                    }
                 }
+
+                Color.white.opacity(0.001)
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let loc):
+                            withAnimation(.easeInOut(duration: 0.1)) {
+                                hoveredPath = hitBlock(point: loc)?.entry.path
+                            }
+                        case .ended:
+                            withAnimation { hoveredPath = nil }
+                        }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onEnded { value in
+                                let loc = value.location
+                                if let block = hitBlock(point: loc), block.entry.isDir {
+                                    onDrill(block.entry)
+                                }
+                            }
+                    )
+                    .onLongPressGesture(minimumDuration: 0.5) { }
+                    onPressingChanged: { pressing in
+                        if pressing, let hovered = hoveredPath,
+                           let block = blocks.first(where: { $0.entry.path == hovered }) {
+                            contextMenuTarget = block.entry
+                        }
+                    }
+                    .contextMenu {
+                        if let target = contextMenuTarget {
+                            contextMenu(target)
+                        }
+                    }
 
                 if let path = hoveredPath,
                    let block = blocks.first(where: { $0.entry.path == path }) {
@@ -41,78 +75,80 @@ struct TreemapView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
-    // MARK: - Block view
+    // MARK: - Hit testing
 
-    private func blockView(_ block: Block) -> some View {
-        let rect = block.rect
-        let drawRect = rect.insetBy(dx: gap / 2, dy: gap / 2)
+    private func hitBlock(point: CGPoint) -> Block? {
+        for block in blocks {
+            let r = block.rect
+            if point.x >= r.minX, point.x <= r.maxX,
+               point.y >= r.minY, point.y <= r.maxY {
+                return block
+            }
+        }
+        return nil
+    }
+
+    private func recomputBlocks(size: CGSize) {
+        guard size != lastSize else { return }
+        lastSize = size
+        blocks = layout(entries: entries, in: size)
+    }
+
+    // MARK: - Drawing
+
+    private func drawBlock(ctx: GraphicsContext, block: Block) {
+        let drawRect = block.rect.insetBy(dx: gap / 2, dy: gap / 2)
         let isHovered = block.entry.path == hoveredPath
         let baseColor = blockColor(for: block.tone)
 
-        return ZStack {
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            isHovered ? baseColor : baseColor.opacity(0.82),
-                            isHovered ? baseColor.opacity(0.85) : baseColor.opacity(0.58)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+        let gradient = Gradient(colors: [
+            isHovered ? baseColor : baseColor.opacity(0.82),
+            isHovered ? baseColor.opacity(0.85) : baseColor.opacity(0.58)
+        ])
+        ctx.fill(
+            Path(roundedRect: drawRect, cornerRadius: cornerRadius),
+            with: .linearGradient(gradient,
+                startPoint: CGPoint(x: drawRect.minX, y: drawRect.minY),
+                endPoint: CGPoint(x: drawRect.maxX, y: drawRect.maxY))
+        )
 
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .stroke(baseColor.opacity(isHovered ? 0.9 : 0.35),
-                        lineWidth: isHovered ? 1.5 : 0.5)
+        ctx.stroke(
+            Path(roundedRect: drawRect, cornerRadius: cornerRadius),
+            with: .color(baseColor.opacity(isHovered ? 0.9 : 0.35)),
+            lineWidth: isHovered ? 1.5 : 0.5
+        )
 
-            if drawRect.width >= 32 && drawRect.height >= 32 {
-                blockLabel(block: block, rect: drawRect)
-            }
-        }
-        .frame(width: drawRect.width, height: drawRect.height)
-        .position(x: drawRect.midX, y: drawRect.midY)
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) {
-                hoveredPath = hovering ? block.entry.path : nil
-            }
-        }
-        .onTapGesture {
-            if block.entry.isDir {
-                onDrill(block.entry)
-            }
-        }
-        .contextMenu {
-            contextMenu(block.entry)
+        if min(drawRect.width, drawRect.height) >= 32 {
+            drawLabel(ctx: ctx, block: block, rect: drawRect)
         }
     }
 
-    private func blockLabel(block: Block, rect: CGRect) -> some View {
+    private func drawLabel(ctx: GraphicsContext, block: Block, rect: CGRect) {
         let fs = fontSize(for: rect)
         let showMeta = rect.height > 50 && rect.width > 50
 
-        return VStack(spacing: 2) {
-            Text(block.entry.name)
-                .font(.system(size: fs, weight: .semibold))
-                .foregroundColor(.white)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity)
+        let nameText = Text(block.entry.name)
+            .font(.system(size: fs, weight: .semibold))
+            .foregroundColor(.white)
 
-            if showMeta {
-                Text("\(ByteFormatter.bytes(block.entry.size))  ·  \(String(format: "%.1f%%", block.fraction))")
-                    .font(.system(size: max(9, fs - 2), weight: .medium, design: .rounded))
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity)
-            }
+        let nameLineH = fs * 1.25
+        let metaLineH = max(9, fs - 2) * 1.25
+        let totalH = nameLineH + metaLineH + 2
+        let textH = showMeta ? totalH : nameLineH
+        let startY = rect.midY - textH / 2
+
+        ctx.draw(nameText, at: CGPoint(x: rect.midX, y: startY), anchor: .top)
+
+        if showMeta {
+            let metaText = Text("\(ByteFormatter.bytes(block.entry.size))  ·  \(String(format: "%.1f%%", block.fraction))")
+                .font(.system(size: max(9, fs - 2), weight: .medium, design: .rounded))
+                .foregroundColor(.white.opacity(0.8))
+            ctx.draw(metaText, at: CGPoint(x: rect.midX, y: startY + nameLineH + 2), anchor: .top)
         }
-        .padding(.horizontal, 8)
     }
 
     private func fontSize(for rect: CGRect) -> CGFloat {
-        let minDim = min(rect.width, rect.height)
-        switch minDim {
+        switch min(rect.width, rect.height) {
         case 140...: return 14
         case 100..<140: return 13
         case 70..<100: return 12
@@ -123,18 +159,14 @@ struct TreemapView: View {
 
     private func blockColor(for tone: StatusTone) -> Color {
         switch tone {
-        case .good:
-            return Color(red: 0.22, green: 0.72, blue: 0.45)
-        case .warn:
-            return Color(red: 0.95, green: 0.60, blue: 0.20)
-        case .neutral:
-            return Color(red: 0.42, green: 0.52, blue: 0.68)
-        case .critical:
-            return Color(red: 0.90, green: 0.30, blue: 0.30)
+        case .good:     return Color(red: 0.22, green: 0.72, blue: 0.45)
+        case .warn:     return Color(red: 0.95, green: 0.60, blue: 0.20)
+        case .neutral:  return Color(red: 0.42, green: 0.52, blue: 0.68)
+        case .critical: return Color(red: 0.90, green: 0.30, blue: 0.30)
         }
     }
 
-    // MARK: - Layout (squarified algorithm)
+    // MARK: - Layout
 
     struct Block {
         let entry: AnalyzeEntry
@@ -166,11 +198,10 @@ struct TreemapView: View {
             toLayout.append((entry: e, area: CGFloat(e.size) * scale))
         }
         if otherSize > 0 {
-            let otherEntry = AnalyzeEntry(
+            toLayout.append((entry: AnalyzeEntry(
                 name: "Other", path: "__other__", size: otherSize, isDir: false,
                 insight: nil, cleanable: nil, lastAccess: nil
-            )
-            toLayout.append((entry: otherEntry, area: CGFloat(otherSize) * scale))
+            ), area: CGFloat(otherSize) * scale))
         }
 
         var blocks: [Block] = []
@@ -201,17 +232,13 @@ struct TreemapView: View {
             }
 
             if container.width > container.height {
-                let rowWidth = rowArea / container.height
-                container = CGRect(
-                    x: container.minX + rowWidth, y: container.minY,
-                    width: container.width - rowWidth, height: container.height
-                )
+                let rw = rowArea / container.height
+                container = CGRect(x: container.minX + rw, y: container.minY,
+                                   width: container.width - rw, height: container.height)
             } else {
-                let rowHeight = rowArea / container.width
-                container = CGRect(
-                    x: container.minX, y: container.minY + rowHeight,
-                    width: container.width, height: container.height - rowHeight
-                )
+                let rh = rowArea / container.width
+                container = CGRect(x: container.minX, y: container.minY + rh,
+                                   width: container.width, height: container.height - rh)
             }
             remaining.removeFirst(row.count)
         }
@@ -225,9 +252,8 @@ struct TreemapView: View {
         let maxArea = areas.max() ?? 0
         let minArea = areas.min() ?? 0
         guard minArea > 0 else { return .infinity }
-        let s2 = shortSide * shortSide
-        let t2 = total * total
-        return max(s2 * maxArea / t2, t2 / (s2 * minArea))
+        return max(shortSide * shortSide * maxArea / (total * total),
+                   total * total / (shortSide * shortSide * minArea))
     }
 
     private func layoutRow(row: [(entry: AnalyzeEntry, area: CGFloat)],
@@ -240,8 +266,7 @@ struct TreemapView: View {
             var y = container.minY
             for item in row {
                 let h = item.area / rowWidth
-                result.append((item.entry, CGRect(x: container.minX, y: y,
-                                                  width: rowWidth, height: h)))
+                result.append((item.entry, CGRect(x: container.minX, y: y, width: rowWidth, height: h)))
                 y += h
             }
         } else {
@@ -249,8 +274,7 @@ struct TreemapView: View {
             var x = container.minX
             for item in row {
                 let w = item.area / rowHeight
-                result.append((item.entry, CGRect(x: x, y: container.minY,
-                                                  width: w, height: rowHeight)))
+                result.append((item.entry, CGRect(x: x, y: container.minY, width: w, height: rowHeight)))
                 x += w
             }
         }
@@ -278,17 +302,14 @@ struct TreemapView: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(blockColor(for: block.tone).opacity(0.3), lineWidth: 1)
-        )
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(blockColor(for: block.tone).opacity(0.3), lineWidth: 1))
         .shadow(color: .black.opacity(0.12), radius: 6, y: 3)
         .frame(width: tipW)
         .position(x: tipX + tipW / 2, y: tipY)
         .allowsHitTesting(false)
     }
 
-    // MARK: - Tone mapping
+    // MARK: - Tone
 
     private func toneFor(_ entry: AnalyzeEntry) -> StatusTone {
         if entry.cleanable ?? false { return .good }
