@@ -12,7 +12,7 @@ struct TreemapView: View {
 
     var body: some View {
         GeometryReader { geo in
-            recomput(geo.size)
+            let _ = recomput(geo.size)
             ZStack(alignment: .topLeading) {
                 ForEach(blocks, id: \.entry.path) { b in
                     blockView(b)
