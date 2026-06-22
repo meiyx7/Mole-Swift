@@ -7,10 +7,9 @@ import SwiftUI
 /// with aspect ratios close to 1 make relative sizes immediately
 /// readable — a 12 GB block is visually 200× the area of a 60 MB one.
 ///
-/// Architecture: Canvas renders the visual layer (fast for many rects),
-/// while a ZStack of transparent hit-test rectangles handles hover,
-/// click, and context menu. This keeps large maps (100+ entries) smooth
-/// while preserving full SwiftUI gesture support.
+/// Architecture: pure SwiftUI views (no Canvas). Each block is a
+/// standalone view with background, text, and gesture handling. This
+/// avoids coordinate-system mismatches between Canvas and SwiftUI.
 struct TreemapView: View {
     let entries: [AnalyzeEntry]
     let totalSize: Int64
@@ -25,15 +24,9 @@ struct TreemapView: View {
     var body: some View {
         GeometryReader { geo in
             let blocks = layout(entries: entries, in: geo.size)
-            ZStack(alignment: .topLeading) {
-                Canvas { ctx, _ in
-                    for block in blocks {
-                        drawBlock(ctx: ctx, block: block)
-                    }
-                }
-
+            ZStack {
                 ForEach(blocks, id: \.entry.path) { block in
-                    hitTestRect(for: block)
+                    blockView(block)
                 }
 
                 if let path = hoveredPath,
@@ -48,30 +41,97 @@ struct TreemapView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
-    // MARK: - Hit-test layer
+    // MARK: - Block view
 
-    private func hitTestRect(for block: Block) -> some View {
-        let inset = block.rect.insetBy(dx: gap / 2, dy: gap / 2)
-        let centerX = inset.minX + inset.width / 2
-        let centerY = inset.minY + inset.height / 2
-        return Rectangle()
-            .fill(Color.white.opacity(0.001))
-            .frame(width: inset.width, height: inset.height)
-            .position(x: centerX, y: centerY)
-            .contentShape(Rectangle())
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.12)) {
-                    hoveredPath = hovering ? block.entry.path : nil
-                }
+    private func blockView(_ block: Block) -> some View {
+        let rect = block.rect
+        let drawRect = rect.insetBy(dx: gap / 2, dy: gap / 2)
+        let isHovered = block.entry.path == hoveredPath
+        let baseColor = blockColor(for: block.tone)
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            isHovered ? baseColor : baseColor.opacity(0.82),
+                            isHovered ? baseColor.opacity(0.85) : baseColor.opacity(0.58)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .stroke(baseColor.opacity(isHovered ? 0.9 : 0.35),
+                        lineWidth: isHovered ? 1.5 : 0.5)
+
+            if drawRect.width >= 32 && drawRect.height >= 32 {
+                blockLabel(block: block, rect: drawRect)
             }
-            .onTapGesture {
-                if block.entry.isDir {
-                    onDrill(block.entry)
-                }
+        }
+        .frame(width: drawRect.width, height: drawRect.height)
+        .position(x: drawRect.midX, y: drawRect.midY)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                hoveredPath = hovering ? block.entry.path : nil
             }
-            .contextMenu {
-                contextMenu(block.entry)
+        }
+        .onTapGesture {
+            if block.entry.isDir {
+                onDrill(block.entry)
             }
+        }
+        .contextMenu {
+            contextMenu(block.entry)
+        }
+    }
+
+    private func blockLabel(block: Block, rect: CGRect) -> some View {
+        let fs = fontSize(for: rect)
+        let showMeta = rect.height > 50 && rect.width > 50
+
+        return VStack(spacing: 2) {
+            Text(block.entry.name)
+                .font(.system(size: fs, weight: .semibold))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity)
+
+            if showMeta {
+                Text("\(ByteFormatter.bytes(block.entry.size))  ·  \(String(format: "%.1f%%", block.fraction))")
+                    .font(.system(size: max(9, fs - 2), weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.8))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.horizontal, 8)
+    }
+
+    private func fontSize(for rect: CGRect) -> CGFloat {
+        let minDim = min(rect.width, rect.height)
+        switch minDim {
+        case 140...: return 14
+        case 100..<140: return 13
+        case 70..<100: return 12
+        case 45..<70: return 11
+        default: return 10
+        }
+    }
+
+    private func blockColor(for tone: StatusTone) -> Color {
+        switch tone {
+        case .good:
+            return Color(red: 0.22, green: 0.72, blue: 0.45)
+        case .warn:
+            return Color(red: 0.95, green: 0.60, blue: 0.20)
+        case .neutral:
+            return Color(red: 0.42, green: 0.52, blue: 0.68)
+        case .critical:
+            return Color(red: 0.90, green: 0.30, blue: 0.30)
+        }
     }
 
     // MARK: - Layout (squarified algorithm)
@@ -195,98 +255,6 @@ struct TreemapView: View {
             }
         }
         return result
-    }
-
-    // MARK: - Drawing
-
-    private func drawBlock(ctx: GraphicsContext, block: Block) {
-        let rect = block.rect
-        let drawRect = rect.insetBy(dx: gap / 2, dy: gap / 2)
-        let isHovered = block.entry.path == hoveredPath
-        let baseColor = blockColor(for: block.tone)
-
-        let gradient = Gradient(colors: [
-            isHovered ? baseColor : baseColor.opacity(0.82),
-            isHovered ? baseColor.opacity(0.85) : baseColor.opacity(0.58)
-        ])
-        ctx.fill(
-            Path(roundedRect: drawRect, cornerRadius: cornerRadius),
-            with: .linearGradient(
-                gradient,
-                startPoint: CGPoint(x: drawRect.minX, y: drawRect.minY),
-                endPoint: CGPoint(x: drawRect.maxX, y: drawRect.maxY)
-            )
-        )
-
-        let borderOpacity: Double = isHovered ? 0.9 : 0.35
-        let borderWidth: CGFloat = isHovered ? 1.5 : 0.5
-        ctx.stroke(
-            Path(roundedRect: drawRect, cornerRadius: cornerRadius),
-            with: .color(baseColor.opacity(borderOpacity)),
-            lineWidth: borderWidth
-        )
-
-        let minDim = min(drawRect.width, drawRect.height)
-        if minDim >= 32 {
-            drawLabel(ctx: ctx, block: block, rect: drawRect)
-        }
-    }
-
-    private func drawLabel(ctx: GraphicsContext, block: Block, rect: CGRect) {
-        let name = block.entry.name
-        let sizeStr = ByteFormatter.bytes(block.entry.size)
-        let pctStr = String(format: "%.1f%%", block.fraction)
-
-        let fs = fontSize(for: rect)
-        let nameFont = Font.system(size: fs, weight: .semibold)
-        let metaFont = Font.system(size: max(9, fs - 2), weight: .medium, design: .rounded)
-
-        let nameText = Text(name).font(nameFont).foregroundColor(.white)
-        let metaText = Text("\(sizeStr)  ·  \(pctStr)").font(metaFont).foregroundColor(.white.opacity(0.8))
-
-        let nameLineH = fs * 1.25
-        let metaLineH = max(9, fs - 2) * 1.25
-        let totalH = nameLineH + metaLineH + 2
-        let showMeta = rect.height > totalH + 8 && rect.width > 50
-
-        let textBlockH = showMeta ? totalH : nameLineH
-        let startY = rect.midY - textBlockH / 2
-
-        let insetLeft: CGFloat = 8
-        let insetRight: CGFloat = 8
-        let availW = rect.width - insetLeft - insetRight
-
-        ctx.draw(nameText, at: CGPoint(x: rect.minX + insetLeft, y: startY),
-                 anchor: .topLeading)
-
-        if showMeta {
-            ctx.draw(metaText, at: CGPoint(x: rect.minX + insetLeft, y: startY + nameLineH + 2),
-                     anchor: .topLeading)
-        }
-    }
-
-    private func fontSize(for rect: CGRect) -> CGFloat {
-        let minDim = min(rect.width, rect.height)
-        switch minDim {
-        case 140...: return 14
-        case 100..<140: return 13
-        case 70..<100: return 12
-        case 45..<70: return 11
-        default: return 10
-        }
-    }
-
-    private func blockColor(for tone: StatusTone) -> Color {
-        switch tone {
-        case .good:
-            return Color(red: 0.22, green: 0.72, blue: 0.45)
-        case .warn:
-            return Color(red: 0.95, green: 0.60, blue: 0.20)
-        case .neutral:
-            return Color(red: 0.42, green: 0.52, blue: 0.68)
-        case .critical:
-            return Color(red: 0.90, green: 0.30, blue: 0.30)
-        }
     }
 
     // MARK: - Tooltip
