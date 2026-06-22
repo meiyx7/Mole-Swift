@@ -43,21 +43,34 @@ struct PreviewParser {
         var totalSpaceText: String?
         var totalItems: Int?
         var totalCategories: Int?
+        /// True when the parser encountered significant lines it couldn't
+        /// match to a known pattern. The UI can use this to show a hint
+        /// that the preview may be incomplete.
+        var degraded: Bool = false
+        /// Raw lines preserved when parsing yields no structured entries,
+        /// so the UI can fall back to displaying them instead of a blank
+        /// preview. Only populated when `entries` is empty.
+        var rawFallback: [String] = []
     }
 
     /// Parse a full buffer of output lines into a summary. Safe to call
     /// repeatedly as new lines arrive.
+    ///
+    /// Fault tolerance: when the CLI output format changes or contains
+    /// unexpected lines, the parser degrades gracefully:
+    /// 1. Unrecognized significant lines are included as `.info` entries
+    ///    so the user still sees them in the structured preview.
+    /// 2. If no entries are parsed at all, `rawFallback` preserves the
+    ///    original lines for raw display.
+    /// 3. `degraded` is set when unrecognized lines were found, so the UI
+    ///    can show a hint.
     static func parse(_ lines: [String]) -> Summary {
         var entries: [Entry] = []
         var currentSection = ""
         var totalSpace: String?
         var totalItems: Int?
         var totalCategories: Int?
-
-        DebugLog.append("PreviewParser.parse: received \(lines.count) lines")
-        if lines.count > 0 {
-            DebugLog.append("PreviewParser.parse: first 5 lines: \(lines.prefix(5).map { String($0.prefix(80)) })")
-        }
+        var unrecognizedLines: [String] = []
 
         for raw in lines {
             let line = raw.trimmingCharacters(in: .whitespaces)
@@ -104,11 +117,35 @@ struct PreviewParser {
 
             if let entry = parseEntry(line, section: currentSection) {
                 entries.append(entry)
+            } else {
+                // Unrecognized line that isn't noise. Track it so we can
+                // either include it as an info entry (if we have other
+                // structured entries) or preserve it for raw fallback.
+                unrecognizedLines.append(line)
             }
         }
 
-        DebugLog.append("PreviewParser: \(entries.count) entries, section=\(currentSection), space=\(totalSpace ?? "nil")")
-        return Summary(entries: entries, totalSpaceText: totalSpace, totalItems: totalItems, totalCategories: totalCategories)
+        // If we have structured entries but also unrecognized lines, include
+        // the unrecognized lines as info entries so the user sees them.
+        if !entries.isEmpty && !unrecognizedLines.isEmpty {
+            for line in unrecognizedLines {
+                entries.append(Entry(section: currentSection, label: line, sizeText: nil, detail: nil, kind: .info))
+            }
+        }
+
+        let degraded = !unrecognizedLines.isEmpty
+        // Only populate rawFallback when we have no structured entries at all,
+        // so the UI can show raw text instead of a blank preview.
+        let rawFallback = entries.isEmpty ? unrecognizedLines : []
+
+        return Summary(
+            entries: entries,
+            totalSpaceText: totalSpace,
+            totalItems: totalItems,
+            totalCategories: totalCategories,
+            degraded: degraded,
+            rawFallback: rawFallback
+        )
     }
 
     private static func parseEntry(_ line: String, section: String) -> Entry? {
@@ -125,7 +162,6 @@ struct PreviewParser {
         if line.hasPrefix("✓ [DRY RUN]") {
             let body = line.replacingOccurrences(of: "✓ [DRY RUN]", with: "").trimmingCharacters(in: .whitespaces)
             let (label, size) = splitCommaSize(body)
-            DebugLog.append("PreviewParser: matched ✓ [DRY RUN], label=\(label), size=\(size ?? "nil")")
             return Entry(section: section.isEmpty ? "Purge" : section, label: label, sizeText: size, detail: nil, kind: .wouldClean)
         }
 

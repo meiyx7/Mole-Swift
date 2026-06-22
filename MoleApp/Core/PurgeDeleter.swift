@@ -117,6 +117,18 @@ enum PurgeDeleter {
                 trashedURL: nil
             )
         }
+        // 2b. Consult ProtectionResolver to honor the CLI's
+        //     SYSTEM_CRITICAL_BUNDLES / DATA_PROTECTED_BUNDLES lists.
+        //     This keeps the GUI in sync with CLI updates without
+        //     requiring manual list maintenance on both sides.
+        if let reason = ProtectionResolver.protectedReason(path: path, bundleID: nil) {
+            return DeleteOutcome(
+                artifact: artifact,
+                success: false,
+                message: "protected: \(reason)",
+                trashedURL: nil
+            )
+        }
 
         // 3. Artifact type must be in the known set. Defense in depth in
         //    case the caller constructed an artifact with an unknown type.
@@ -154,6 +166,14 @@ enum PurgeDeleter {
                 trashedURL: trashed,
                 success: true
             )
+            // 6b. Also append to the CLI's unified deletions.log so
+            //     `mo history --json` includes GUI-driven purge deletes.
+            UnifiedOperationLog.appendToCLIDeletionLog(
+                path: artifact.url.path,
+                sizeBytes: artifact.sizeBytes,
+                mode: "trash",
+                status: "trashed"
+            )
 
             return DeleteOutcome(
                 artifact: artifact,
@@ -166,6 +186,13 @@ enum PurgeDeleter {
                 artifact: artifact,
                 trashedURL: nil,
                 success: false,
+                error: error.localizedDescription
+            )
+            UnifiedOperationLog.appendToCLIDeletionLog(
+                path: artifact.url.path,
+                sizeBytes: artifact.sizeBytes,
+                mode: "trash",
+                status: "failed",
                 error: error.localizedDescription
             )
             return DeleteOutcome(

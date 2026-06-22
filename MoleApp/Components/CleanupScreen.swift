@@ -26,7 +26,7 @@ struct CleanupScreen: View {
 
     @EnvironmentObject private var loc: Localization
     @StateObject private var runner = CommandRunner()
-    @State private var phase: Phase = .idle
+    @StateObject private var phaseModel = CleanupPhaseModel()
     @State private var showConfirm = false
     @State private var showRawConsole = false
     @State private var showCategories = true
@@ -34,15 +34,25 @@ struct CleanupScreen: View {
     /// result banner can show "reclaimed X · Y items" after completion.
     @State private var previewSnapshot: PreviewParser.Summary?
 
-    private enum Phase: Equatable { case idle, previewing, previewed, running, done, error }
+    /// Cached parse result. Invalidated when `runner.lines` count changes.
+    /// `parsed` is read multiple times per body evaluation (hasVisualContent,
+    /// contentArea, runNow); without caching we'd re-parse the full output
+    /// on every access.
+    @State private var cachedParsed: PreviewParser.Summary?
+    @State private var cachedParsedLinesCount: Int = -1
+
+    private var phase: CleanupPhase { phaseModel.phase }
 
     private var parsed: PreviewParser.Summary {
-        let texts = runner.lines.map { $0.text }
-        DebugLog.append("CleanupScreen.parsed: runner.lines.count=\(runner.lines.count), texts.count=\(texts.count)")
-        if texts.count > 0 {
-            DebugLog.append("CleanupScreen.parsed: first 3 texts: \(texts.prefix(3).map { String($0.prefix(60)) })")
+        let count = runner.lines.count
+        if count == cachedParsedLinesCount, let cached = cachedParsed {
+            return cached
         }
-        return PreviewParser.parse(texts)
+        let texts = runner.lines.map { $0.text }
+        let result = PreviewParser.parse(texts)
+        cachedParsed = result
+        cachedParsedLinesCount = count
+        return result
     }
 
     private var hasVisualContent: Bool {
@@ -96,18 +106,14 @@ struct CleanupScreen: View {
     /// 1. Scan  2. Review  3. Confirm & Run.
     private var stepGuide: some View {
         HStack(spacing: 10) {
-            StepDot(n: 1, label: loc.t("扫描", "Scan"), active: phase == .idle || phase == .previewing, done: phaseIsAfterPreview)
-            StepConnector(active: phaseIsAfterPreview)
-            StepDot(n: 2, label: loc.t("查看", "Review"), active: phase == .previewed, done: phase == .running || phase == .done)
+            StepDot(n: 1, label: loc.t("扫描", "Scan"), active: phase == .idle || phase == .scanning, done: phase.isAfterScan)
+            StepConnector(active: phase.isAfterScan)
+            StepDot(n: 2, label: loc.t("查看", "Review"), active: phase == .scanned, done: phase == .running || phase == .done)
             StepConnector(active: phase == .running || phase == .done)
             StepDot(n: 3, label: loc.t("执行", "Run"), active: phase == .running, done: phase == .done)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    private var phaseIsAfterPreview: Bool {
-        phase == .previewed || phase == .running || phase == .done || phase == .error
     }
 
     // MARK: - Idle hero card
@@ -219,7 +225,7 @@ struct CleanupScreen: View {
                 .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
                 .multilineTextAlignment(.center)
                 .padding(12)
-        } else if phase == .previewing {
+        } else if phase == .scanning {
             VStack(spacing: 10) {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
@@ -253,11 +259,18 @@ struct CleanupScreen: View {
             } else if hasVisualContent {
                 PreviewSummaryView(summary: parsed, loc: loc)
                     .padding(12)
+                if parsed.degraded {
+                    degradedHint
+                }
+            } else if !parsed.rawFallback.isEmpty {
+                // Parser found no structured entries but preserved raw
+                // lines. Show them so the user sees what happened.
+                ConsoleOutputView(lines: parsed.rawFallback.map { CLIOutputLine(text: $0, isError: false, date: Date()) })
+                    .frame(minHeight: 120, maxHeight: 240)
+                    .padding(12)
+                degradedHint
             } else {
-                // Output exists but parser found no structured entries
-                // (e.g. installer "No installer files to clean"). Show the
-                // raw lines in a compact form so the user still sees what
-                // happened.
+                // No output at all.
                 ConsoleOutputView(lines: runner.lines)
                     .frame(minHeight: 120, maxHeight: 240)
                     .padding(12)
@@ -300,6 +313,23 @@ struct CleanupScreen: View {
         .padding(12)
     }
 
+    /// Shown when PreviewParser couldn't fully parse the CLI output.
+    /// Prompts the user to check the raw console for details.
+    private var degradedHint: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 10))
+                .foregroundColor(.orange)
+            Text(loc.t(
+                "部分输出无法解析，请查看原始输出以获取完整信息。",
+                "Some output couldn't be parsed. Check raw output for full details."
+            ))
+                .font(.system(size: 10)).foregroundColor(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12).padding(.bottom, 8)
+    }
+
     // MARK: - Action bar (内嵌在扫描结果卡片底部，四个模块统一)
 
     @ViewBuilder
@@ -314,11 +344,11 @@ struct CleanupScreen: View {
                     Label(loc.t("开始扫描", "Start Scan"), systemImage: "magnifyingglass")
                 }
                 .buttonStyle(PrimaryButtonStyle())
-            case .previewing:
+            case .scanning:
                 Spacer()
                 Button(loc.t("停止", "Stop"), role: .destructive) { runner.cancel() }
                     .buttonStyle(.bordered)
-            case .previewed:
+            case .scanned:
                 Button {
                     resetToIdle()
                 } label: {
@@ -361,7 +391,7 @@ struct CleanupScreen: View {
 
     @ViewBuilder
     private var statusPill: some View {
-        if phase == .previewing || phase == .running {
+        if phase == .scanning || phase == .running {
             HStack(spacing: 5) {
                 ProgressView().controlSize(.mini); Text(loc.t("运行中", "running")).font(.system(size: 10))
             }
@@ -386,8 +416,8 @@ struct CleanupScreen: View {
     private var phaseLabel: String {
         switch phase {
         case .idle: return loc.t("扫描结果", "Scan Results")
-        case .previewing: return loc.t("扫描中（试运行）…", "Scanning (dry-run)…")
-        case .previewed: return loc.t("扫描完成", "Scan complete")
+        case .scanning: return loc.t("扫描中（试运行）…", "Scanning (dry-run)…")
+        case .scanned: return loc.t("扫描完成", "Scan complete")
         case .running: return loc.t("运行中…", "Running…")
         case .done: return loc.t("已完成", "Finished")
         case .error: return loc.t("扫描失败", "Scan failed")
@@ -407,15 +437,15 @@ struct CleanupScreen: View {
 
     @MainActor
     private func runPreview() async {
-        phase = .previewing
+        phaseModel.startScanning()
         showCategories = false
         await runner.runAwaited { onLine in try await preview(onLine) }
         // If scan failed (error set or non-zero exit with no output),
         // go to error phase so the user can retry instead of being stuck.
         if runner.error != nil || (runner.exitCode != nil && runner.exitCode != 0 && !runner.hasOutput) {
-            phase = .error
+            phaseModel.fail(nil)
         } else {
-            phase = .previewed
+            phaseModel.finishScanning()
         }
     }
 
@@ -423,10 +453,10 @@ struct CleanupScreen: View {
         // Capture the preview summary so the result banner can show
         // "reclaimed X · Y items" after the run completes.
         previewSnapshot = parsed
-        phase = .running
+        phaseModel.startRunning(total: 0)
         Task {
             await runner.runAwaited { onLine in try await run(onLine) }
-            phase = .done
+            phaseModel.finish(message: nil)
         }
     }
 
@@ -436,7 +466,9 @@ struct CleanupScreen: View {
         runner.exitCode = nil
         runner.error = nil
         previewSnapshot = nil
-        phase = .idle
+        cachedParsed = nil
+        cachedParsedLinesCount = -1
+        phaseModel.resetToIdle()
         showCategories = true
     }
 }

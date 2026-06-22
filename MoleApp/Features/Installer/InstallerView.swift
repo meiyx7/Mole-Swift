@@ -15,14 +15,12 @@ struct InstallerView: View {
     @EnvironmentObject private var service: MoleService
     @EnvironmentObject private var loc: Localization
     @StateObject private var runner = CommandRunner()
-    @State private var phase: Phase = .idle
+    @State private var phase: CleanupPhase = .idle
     @State private var showConfirm = false
     @State private var showRawConsole = false
     @State private var showCategories = true
     @State private var foundFiles: [InstallerScanner.FoundFile] = []
     @State private var scanError: String?
-
-    private enum Phase: Equatable { case idle, scanning, scanned, running, done }
 
     private var totalSize: Int64 {
         foundFiles.reduce(0) { $0 + $1.sizeBytes }
@@ -74,18 +72,14 @@ struct InstallerView: View {
 
     private var stepGuide: some View {
         HStack(spacing: 10) {
-            StepDot(n: 1, label: loc.t("扫描", "Scan"), active: phase == .idle || phase == .scanning, done: phaseIsAfterScan)
-            StepConnector(active: phaseIsAfterScan)
+            StepDot(n: 1, label: loc.t("扫描", "Scan"), active: phase == .idle || phase == .scanning, done: phase.isAfterScan)
+            StepConnector(active: phase.isAfterScan)
             StepDot(n: 2, label: loc.t("查看", "Review"), active: phase == .scanned, done: phase == .running || phase == .done)
             StepConnector(active: phase == .running || phase == .done)
             StepDot(n: 3, label: loc.t("执行", "Run"), active: phase == .running, done: phase == .done)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    private var phaseIsAfterScan: Bool {
-        phase == .scanned || phase == .running || phase == .done
     }
 
     // MARK: - Idle hero card
@@ -373,6 +367,12 @@ struct InstallerView: View {
                     Label(loc.t("再清理一次", "Run Again"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(PrimaryButtonStyle())
+            case .error:
+                Spacer()
+                Button { scanNow() } label: {
+                    Label(loc.t("重试扫描", "Retry scan"), systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(PrimaryButtonStyle())
             }
         }
     }
@@ -404,6 +404,7 @@ struct InstallerView: View {
         case .scanned: return loc.t("扫描完成", "Scan Complete")
         case .running: return loc.t("运行中…", "Running…")
         case .done: return loc.t("已完成", "Finished")
+        case .error: return loc.t("扫描失败", "Scan failed")
         }
     }
 

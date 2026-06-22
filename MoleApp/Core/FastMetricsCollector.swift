@@ -3,11 +3,16 @@ import Foundation
 /// Merges native fast-metrics (CPU, memory, disk, network) with CLI slow-metrics
 /// (trash, bluetooth, proxy, battery, GPU, thermal, processes) into a single
 /// StatusSnapshot. Fast metrics update every 1s via native APIs; slow metrics
-/// update every ~30s via `mo status --json`.
+/// update via `mo status --json` on a tiered schedule:
+/// - Medium tier (top processes, process alerts): every ~15s
+/// - Slow tier (battery, thermal, bluetooth, GPU, trash, proxy): every ~120s
+/// Both tiers share a single CLI call when both are due; when only the medium
+/// tier is due, the slow-tier fields are preserved from the last full refresh.
 @MainActor
 final class FastMetricsCollector {
     private var slowSnapshot: StatusSnapshot?
     private var lastSlowRefresh: Date = .distantPast
+    private var lastMediumRefresh: Date = .distantPast
     private var isRefreshingSlow = false
 
     /// Ring buffer for network history (last 60 data points = 60s at 1s interval).
@@ -15,8 +20,13 @@ final class FastMetricsCollector {
     private var txHistory: [Double] = []
     private let maxHistoryPoints = 60
 
-    /// Interval between slow (CLI) refreshes.
-    let slowInterval: TimeInterval = 30
+    /// Interval for medium-tier refresh (top processes, process alerts).
+    /// These change frequently enough to warrant a shorter cycle.
+    let mediumInterval: TimeInterval = 15
+    /// Interval for slow-tier refresh (battery, thermal, bluetooth, GPU, trash,
+    /// proxy). These change slowly; refreshing them every 15s wastes CPU and
+    /// triggers unnecessary SwiftUI re-renders.
+    let slowInterval: TimeInterval = 120
 
     // MARK: - Public
 
@@ -24,7 +34,7 @@ final class FastMetricsCollector {
     /// slow snapshot. If no slow snapshot exists yet, triggers one.
     func collectFast() async -> StatusSnapshot? {
         if slowSnapshot == nil {
-            await refreshSlow()
+            await refreshFromCLI(fullUpdate: true)
         }
         guard var base = slowSnapshot else { return nil }
 
@@ -100,22 +110,28 @@ final class FastMetricsCollector {
         return base
     }
 
-    /// Refreshes slow metrics via CLI. Only runs if enough time has passed.
+    /// Refreshes CLI metrics on a tiered schedule. When the medium tier is due
+    /// but the slow tier is not, only top processes and process alerts are
+    /// updated; slow-tier fields (battery, thermal, bluetooth, GPU, trash,
+    /// proxy) are preserved from the last full refresh. When both are due,
+    /// a single CLI call updates everything.
     func refreshSlowIfNeeded() async {
         guard !isRefreshingSlow else { return }
         let now = Date()
-        guard now.timeIntervalSince(lastSlowRefresh) >= slowInterval else { return }
-        await refreshSlow()
+        let needsMedium = now.timeIntervalSince(lastMediumRefresh) >= mediumInterval
+        let needsSlow = now.timeIntervalSince(lastSlowRefresh) >= slowInterval
+        guard needsMedium || needsSlow else { return }
+        await refreshFromCLI(fullUpdate: needsSlow)
     }
 
     /// Forces a slow refresh (e.g. on first load or user pull-to-refresh).
     func forceRefreshSlow() async {
-        await refreshSlow()
+        await refreshFromCLI(fullUpdate: true)
     }
 
     // MARK: - Private
 
-    private func refreshSlow() async {
+    private func refreshFromCLI(fullUpdate: Bool) async {
         guard !isRefreshingSlow else { return }
         isRefreshingSlow = true
         defer { isRefreshingSlow = false }
@@ -123,8 +139,24 @@ final class FastMetricsCollector {
         guard let service = FastMetricsCollector.sharedService else { return }
         do {
             let snap = try await service.statusSnapshot()
-            slowSnapshot = snap
-            lastSlowRefresh = Date()
+            if fullUpdate {
+                slowSnapshot = snap
+                lastSlowRefresh = Date()
+                lastMediumRefresh = Date()
+            } else {
+                // Medium-tier partial update: preserve slow-changing fields
+                // from the last full refresh, only update top processes and
+                // process alerts.
+                if var base = slowSnapshot {
+                    base.topProcesses = snap.topProcesses
+                    base.processAlerts = snap.processAlerts
+                    slowSnapshot = base
+                } else {
+                    slowSnapshot = snap
+                    lastSlowRefresh = Date()
+                }
+                lastMediumRefresh = Date()
+            }
         } catch {
             // Keep the last slow snapshot on error
         }

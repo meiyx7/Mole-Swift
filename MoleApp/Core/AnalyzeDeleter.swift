@@ -89,10 +89,19 @@ enum AnalyzeDeleter {
 
         // 2. Reject protected paths. Mirrors `isProtectedAnalyzeDeletePath`:
         //    OrbStack state and Group Containers *.dev.orbstack entries.
+        //    Additionally consult ProtectionResolver to honor the CLI's
+        //    SYSTEM_CRITICAL_BUNDLES / DATA_PROTECTED_BUNDLES lists so the
+        //    GUI stays in sync with CLI updates without code changes.
         if isProtectedAnalyzeDeletePath(path) {
             return DeleteOutcome(
                 path: path, name: name, size: size, isDir: false,
                 success: false, message: "protected path", trashedURL: nil
+            )
+        }
+        if let reason = ProtectionResolver.protectedReason(path: path, bundleID: nil) {
+            return DeleteOutcome(
+                path: path, name: name, size: size, isDir: false,
+                success: false, message: "protected: \(reason)", trashedURL: nil
             )
         }
 
@@ -125,6 +134,14 @@ enum AnalyzeDeleter {
                 trashedURL: trashed,
                 success: true
             )
+            // 5b. Also append to the CLI's unified deletions.log so
+            //     `mo history --json` includes GUI-driven deletes.
+            UnifiedOperationLog.appendToCLIDeletionLog(
+                path: path,
+                sizeBytes: size,
+                mode: "trash",
+                status: "trashed"
+            )
 
             return DeleteOutcome(
                 path: path, name: name, size: size, isDir: isDir,
@@ -137,6 +154,13 @@ enum AnalyzeDeleter {
                 isDir: isDir,
                 trashedURL: nil,
                 success: false,
+                error: error.localizedDescription
+            )
+            UnifiedOperationLog.appendToCLIDeletionLog(
+                path: path,
+                sizeBytes: size,
+                mode: "trash",
+                status: "failed",
                 error: error.localizedDescription
             )
             return DeleteOutcome(
