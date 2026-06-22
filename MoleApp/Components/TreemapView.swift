@@ -34,38 +34,15 @@ struct TreemapView: View {
     let contextMenu: (AnalyzeEntry) -> AnyView
 
     @State private var hoveredPath: String?
-    /// Captured container size. GeometryReader inside a ScrollView/VStack
-    /// does not reliably receive the parent width (it can collapse to 0,
-    /// which makes the treemap render as one or two tiny blocks). We
-    /// capture the size via a background GeometryReader and store it here,
-    /// then lay out the treemap from this stored value.
-    @State private var containerSize: CGSize = .zero
 
     var body: some View {
-        // Layer 1: an invisible background that captures the available size.
-        // Color.clear expands to fill the parent, and the GeometryReader in
-        // its background reports the actual width/height the parent granted.
-        Color.clear
-            .background(
-                GeometryReader { geo in
-                    Color.clear
-                        .onAppear { containerSize = geo.size }
-                        .onChange(of: geo.size) { newSize in containerSize = newSize }
-                }
-            )
-            .overlay {
-                // Layer 2: the actual treemap, laid out from the captured size.
-                treemapContent
-            }
-            .frame(minHeight: 280)
-            .background(Color(nsColor: .textBackgroundColor).opacity(0.4))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-
-    @ViewBuilder
-    private var treemapContent: some View {
-        if containerSize.width > 0 && containerSize.height > 0 {
-            let blocks = layout(entries: entries, in: containerSize)
+        // GeometryReader as root, with an explicit frame from the parent.
+        // The parent (treemapSection) sets .frame(maxWidth: .infinity) and
+        // .frame(height: 420), so geo.size is the full available width and
+        // the fixed height. This matches the pattern used by ProgressBar
+        // in Components.swift and is reliable inside ScrollView/VStack.
+        GeometryReader { geo in
+            let blocks = layout(entries: entries, in: geo.size)
             ZStack(alignment: .topLeading) {
                 // Visual layer: Canvas for fast rect rendering.
                 Canvas { ctx, _ in
@@ -82,10 +59,14 @@ struct TreemapView: View {
                 // Tooltip overlay (non-hit-testing).
                 if let path = hoveredPath,
                    let block = blocks.first(where: { $0.entry.path == path }) {
-                    tooltip(for: block, in: containerSize)
+                    tooltip(for: block, in: geo.size)
                 }
             }
         }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 280)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.4))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     // MARK: - Hit-test layer
@@ -122,15 +103,47 @@ struct TreemapView: View {
     }
 
     /// Runs the squarified treemap algorithm over `entries` within `size`.
+    ///
+    /// To keep the map readable, entries beyond `maxVisible` (default 10)
+    /// are merged into a single "Other" block. Without this, a 800×340
+    /// container with 15 entries compresses the smallest ones to <5px
+    /// strips that are invisible and unclickable. DaisyDisk / GrandPerspective
+    /// apply the same merging.
     private func layout(entries: [AnalyzeEntry], in size: CGSize) -> [Block] {
-        guard !entries.isEmpty, totalSize > 0 else { return [] }
+        guard !entries.isEmpty, totalSize > 0, size.width > 0, size.height > 0 else { return [] }
 
+        // Merge small entries into "Other" so the map stays readable.
+        // Keep at most 10 visible blocks; everything smaller becomes "Other".
+        let maxVisible = 10
         let sorted = entries.sorted { $0.size > $1.size }
+        let visible: [AnalyzeEntry]
+        let otherSize: Int64
+
+        if sorted.count > maxVisible {
+            visible = Array(sorted.prefix(maxVisible))
+            otherSize = sorted.dropFirst(maxVisible).reduce(Int64(0)) { $0 + $1.size }
+        } else {
+            visible = sorted
+            otherSize = 0
+        }
+
+        // Build the list to lay out, appending "Other" if needed.
+        var toLayout: [(entry: AnalyzeEntry, area: CGFloat)] = []
         let area = size.width * size.height
         let scale = area / CGFloat(totalSize)
+        for e in visible {
+            toLayout.append((entry: e, area: CGFloat(e.size) * scale))
+        }
+        if otherSize > 0 {
+            let otherEntry = AnalyzeEntry(
+                name: "Other", path: "__other__", size: otherSize, isDir: false,
+                insight: nil, cleanable: nil, lastAccess: nil
+            )
+            toLayout.append((entry: otherEntry, area: CGFloat(otherSize) * scale))
+        }
 
         var blocks: [Block] = []
-        var remaining = sorted.map { (entry: $0, area: CGFloat($0.size) * scale) }
+        var remaining = toLayout
         var container = CGRect(origin: .zero, size: size)
 
         while !remaining.isEmpty {
@@ -158,7 +171,11 @@ struct TreemapView: View {
                 blocks.append(Block(entry: entry, rect: rect, tone: tone, fraction: fraction))
             }
 
-            if container.width <= container.height {
+            // Shrink the container by the row we just laid out. Direction
+            // must match layoutRow: if width > height the row was a vertical
+            // strip on the left, so shrink from the left; otherwise the row
+            // was a horizontal strip on top, so shrink from the top.
+            if container.width > container.height {
                 let rowWidth = rowArea / container.height
                 container = CGRect(
                     x: container.minX + rowWidth, y: container.minY,
@@ -193,7 +210,18 @@ struct TreemapView: View {
         guard total > 0 else { return [] }
         var result: [(entry: AnalyzeEntry, rect: CGRect)] = []
 
-        if container.width <= container.height {
+        // Squarified: the row is laid out along the SHORT side of the
+        // container. If width > height, the short side is height, so the
+        // row occupies a vertical strip on the left edge and items stack
+        // vertically within it. If height >= width, the row occupies a
+        // horizontal strip on the top edge and items line up horizontally.
+        //
+        // The previous version had this inverted, which made wide
+        // containers (800×420) lay big items out as full-width horizontal
+        // bars instead of vertical strips — producing the "two long bars"
+        // effect.
+        if container.width > container.height {
+            // Short side is height: vertical strip on the left edge.
             let rowWidth = total / container.height
             var y = container.minY
             for item in row {
@@ -203,6 +231,7 @@ struct TreemapView: View {
                 y += h
             }
         } else {
+            // Short side is width: horizontal strip on the top edge.
             let rowHeight = total / container.width
             var x = container.minX
             for item in row {

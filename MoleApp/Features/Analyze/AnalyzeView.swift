@@ -567,7 +567,7 @@ struct AnalyzeView: View {
                 }
             )
             .frame(maxWidth: .infinity)
-            .frame(height: 340)
+            .frame(height: 420)
             topEntriesList(result)
         }
     }
