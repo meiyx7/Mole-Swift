@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 /// Squarified treemap layout for disk-usage visualisation.
 ///
@@ -302,52 +301,49 @@ struct TreemapView: View {
 
 // MARK: - NSView overlay for pointer events
 
-/// Transparent NSView that tracks mouse position and click, mapping
-/// coordinates to treemap blocks. This avoids all SwiftUI layout
-/// coordinate mismatches.
 private struct TreemapOverlay: NSViewRepresentable {
     let blocks: [TreemapView.Block]
     let onHover: (String?) -> Void
     let onTap: (String?) -> Void
 
+    func makeCoordinator() -> Coordinator {
+        Coordinator(blocks: blocks, onHover: onHover, onTap: onTap)
+    }
+
     func makeNSView(context: Context) -> NSView {
-        let view = OverlayView()
-        view.blocks = blocks
-        view.onHover = onHover
-        view.onTap = onTap
+        let view = NSView()
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: context.coordinator,
+            userInfo: nil
+        )
+        view.addTrackingArea(trackingArea)
+        view.wantsLayer = true
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        guard let view = nsView as? OverlayView else { return }
-        view.blocks = blocks
-        view.onHover = onHover
-        view.onTap = onTap
+        context.coordinator.blocks = blocks
+        context.coordinator.onHover = onHover
+        context.coordinator.onTap = onTap
     }
 
-    class OverlayView: NSView {
-        var blocks: [TreemapView.Block] = []
-        var onHover: ((String?) -> Void)?
-        var onTap: ((String?) -> Void)?
+    class Coordinator: NSObject {
+        var blocks: [TreemapView.Block]
+        var onHover: (String?) -> Void
+        var onTap: (String?) -> Void
 
-        override var acceptsFirstResponder: Bool { true }
-
-        override func updateTrackingAreas() {
-            super.updateTrackingAreas()
-            for area in trackingAreas {
-                removeTrackingArea(area)
-            }
-            addTrackingArea(NSTrackingArea(
-                rect: bounds,
-                options: [.mouseMoved, .activeInKeyWindow],
-                owner: self,
-                userInfo: nil
-            ))
+        init(blocks: [TreemapView.Block], onHover: @escaping (String?) -> Void, onTap: @escaping (String?) -> Void) {
+            self.blocks = blocks
+            self.onHover = onHover
+            self.onTap = onTap
         }
 
         override func mouseMoved(with event: NSEvent) {
-            let point = convert(event.locationInWindow, from: nil)
-            let flipped = CGPoint(x: point.x, y: bounds.height - point.y)
+            guard let view = event.window?.contentView else { return }
+            let point = view.convert(event.locationInWindow, from: nil)
+            let flipped = CGPoint(x: point.x, y: view.bounds.height - point.y)
             onHover?(hitBlock(at: flipped))
         }
 
@@ -356,8 +352,9 @@ private struct TreemapOverlay: NSViewRepresentable {
         }
 
         override func mouseDown(with event: NSEvent) {
-            let point = convert(event.locationInWindow, from: nil)
-            let flipped = CGPoint(x: point.x, y: bounds.height - point.y)
+            guard let view = event.window?.contentView else { return }
+            let point = view.convert(event.locationInWindow, from: nil)
+            let flipped = CGPoint(x: point.x, y: view.bounds.height - point.y)
             onTap?(hitBlock(at: flipped))
         }
 
