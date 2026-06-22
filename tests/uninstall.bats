@@ -97,15 +97,24 @@ EOF
 @test "find_app_files discovers nested XPC helper preferences from selected app" {
 	app="$HOME/Applications/SoundSource.app"
 	mkdir -p "$app/Contents/Frameworks/RemoteAU.framework/Versions/A/XPCServices/RemoteAUHost.xpc/Contents"
+	mkdir -p "$app/Contents/Frameworks/Sparkle.framework/Versions/A/XPCServices/DownloaderService.xpc/Contents"
 	mkdir -p "$app/Contents/Frameworks/Sparkle.framework/Versions/A/Resources/Autoupdate.app/Contents"
 	mkdir -p "$HOME/Library/Caches/com.rogueamoeba.RemoteAUHost"
 	mkdir -p "$HOME/Library/Caches/com.rogueamoeba.RemoteAUHost.shared"
+	mkdir -p "$HOME/Library/HTTPStorages/org.sparkle-project.DownloaderService"
 	mkdir -p "$HOME/Library/Preferences"
 	cat > "$app/Contents/Frameworks/RemoteAU.framework/Versions/A/XPCServices/RemoteAUHost.xpc/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>CFBundleIdentifier</key><string>com.rogueamoeba.RemoteAUHost</string>
+</dict></plist>
+PLIST
+	cat > "$app/Contents/Frameworks/Sparkle.framework/Versions/A/XPCServices/DownloaderService.xpc/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>org.sparkle-project.DownloaderService</string>
 </dict></plist>
 PLIST
 	cat > "$app/Contents/Frameworks/Sparkle.framework/Versions/A/Resources/Autoupdate.app/Contents/Info.plist" <<'PLIST'
@@ -130,6 +139,7 @@ EOF
 	[[ "$result" == *"Library/Caches/com.rogueamoeba.RemoteAUHost"* ]]
 	[[ "$result" != *"Library/Caches/com.rogueamoeba.RemoteAUHost.shared"* ]]
 	[[ "$result" != *"org.sparkle-project.Sparkle.Autoupdate.plist"* ]]
+	[[ "$result" != *"org.sparkle-project.DownloaderService"* ]]
 }
 
 @test "find_app_system_files discovers bundle-id-prefixed LaunchDaemons" {
@@ -210,17 +220,21 @@ PLIST
 
 touch "$diag_dir/Foo.crash"
 touch "$diag_dir/Foo.diag"
+touch "$diag_dir/Foo Helper.diag"
 touch "$diag_dir/Foo_2026-01-01-120000_host.ips"
 touch "$diag_dir/Foobar.crash"
 touch "$diag_dir/Foobar.diag"
+touch "$diag_dir/Foobar Helper.diag"
 touch "$diag_dir/Foobar_2026-01-01-120001_host.ips"
 
 result=$(get_diagnostic_report_paths_for_app "$app_dir" "Foo" "$diag_dir")
 [[ "$result" == *"Foo.crash"* ]] || exit 1
 [[ "$result" == *"Foo.diag"* ]] || exit 1
+[[ "$result" == *"Foo Helper.diag"* ]] || exit 1
 [[ "$result" == *"Foo_2026-01-01-120000_host.ips"* ]] || exit 1
 [[ "$result" != *"Foobar.crash"* ]] || exit 1
 [[ "$result" != *"Foobar.diag"* ]] || exit 1
+[[ "$result" != *"Foobar Helper.diag"* ]] || exit 1
 [[ "$result" != *"Foobar_2026-01-01-120001_host.ips"* ]] || exit 1
 EOF
 
@@ -244,6 +258,44 @@ EOF
 	)"
 
 	[ "$result" -ge 3 ]
+}
+
+@test "calculate_total_size does not double-count nested paths" {
+	mkdir -p "$HOME/sized-parent/child"
+	dd if=/dev/zero of="$HOME/sized-parent/child/payload" bs=1024 count=2 >/dev/null 2>&1
+
+	result="$(
+		HOME="$HOME" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+parent="$HOME/sized-parent"
+child="$HOME/sized-parent/child"
+parent_only=$(calculate_total_size "$parent")
+with_child=$(calculate_total_size "$(printf '%s\n%s\n' "$parent" "$child")")
+printf '%s|%s\n' "$parent_only" "$with_child"
+EOF
+	)"
+
+	parent_only="${result%%|*}"
+	with_child="${result##*|}"
+	[ "$parent_only" -gt 0 ]
+	[ "$with_child" -eq "$parent_only" ]
+}
+
+@test "format_uninstall_preview_path includes per-path size" {
+	dd if=/dev/zero of="$HOME/preview-size-file" bs=1024 count=1 >/dev/null 2>&1
+
+	result="$(
+		HOME="$HOME" bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/uninstall/batch.sh"
+format_uninstall_preview_path "$HOME/preview-size-file"
+EOF
+	)"
+
+	[[ "$result" == *"~/preview-size-file"* ]]
+	[[ "$result" == *"1KB"* ]]
 }
 
 @test "batch_uninstall_applications removes selected app data" {
@@ -359,7 +411,7 @@ total_size_cleaned=0
 
 printf '\n' | batch_uninstall_applications > "$HOME/output.log" 2>&1
 
-grep -q "Review only: $HOME/system/com.example.review.helper" "$HOME/output.log"
+grep -q "Review only: ~/system/com.example.review.helper" "$HOME/output.log"
 ! grep -q "$HOME/system/com.example.review.helper" "$HOME/remove.log"
 [[ -e "$HOME/system/com.example.review.helper" ]]
 EOF

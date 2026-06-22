@@ -14,6 +14,7 @@ readonly MOLE_FILE_OPS_LOADED=1
 readonly MOLE_ERR_SIP_PROTECTED=10
 readonly MOLE_ERR_AUTH_FAILED=11
 readonly MOLE_ERR_READONLY_FS=12
+readonly MOLE_ERR_PROTECTED_PATH=13
 
 # Ensure dependencies are loaded
 _MOLE_CORE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -360,6 +361,7 @@ safe_sudo_remove() {
     if ! validate_path_for_deletion "$path"; then
         if declare -f should_protect_path > /dev/null 2>&1 && should_protect_path "$path"; then
             debug_log "Skipped sudo remove for protected path: $path"
+            return "$MOLE_ERR_PROTECTED_PATH"
         else
             log_error "Path validation failed for sudo remove: $path"
         fi
@@ -977,14 +979,39 @@ get_path_size_kb() {
 calculate_total_size() {
     local files="$1"
     local total_kb=0
+    local -a unique_paths=()
 
     while IFS= read -r file; do
         if [[ -n "$file" && -e "$file" ]]; then
-            local size_kb
-            size_kb=$(get_path_size_kb "$file")
-            total_kb=$((total_kb + size_kb))
+            local normalized_file="${file%/}"
+            [[ -n "$normalized_file" ]] || normalized_file="$file"
+
+            local skip_file=false
+            local -a filtered_paths=()
+            local existing_file
+            for existing_file in "${unique_paths[@]+"${unique_paths[@]}"}"; do
+                if [[ "$normalized_file" == "$existing_file" || "$normalized_file" == "$existing_file"/* ]]; then
+                    skip_file=true
+                    break
+                fi
+                if [[ "$existing_file" == "$normalized_file"/* ]]; then
+                    continue
+                fi
+                filtered_paths+=("$existing_file")
+            done
+
+            if [[ "$skip_file" == "false" ]]; then
+                unique_paths=("${filtered_paths[@]+"${filtered_paths[@]}"}")
+                unique_paths+=("$normalized_file")
+            fi
         fi
     done <<< "$files"
+
+    for file in "${unique_paths[@]+"${unique_paths[@]}"}"; do
+        local size_kb
+        size_kb=$(get_path_size_kb "$file")
+        total_kb=$((total_kb + size_kb))
+    done
 
     echo "$total_kb"
 }
@@ -1012,6 +1039,9 @@ diagnose_removal_failure() {
         "$MOLE_ERR_READONLY_FS")
             reason="filesystem is read-only"
             suggestion="Check if disk needs repair"
+            ;;
+        "$MOLE_ERR_PROTECTED_PATH")
+            reason="protected by Mole safety rules"
             ;;
         *)
             reason="permission denied"

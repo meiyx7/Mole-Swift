@@ -260,6 +260,24 @@ EOF
 	[[ "$output" != *"UPDATE_CALLED"* ]]
 }
 
+@test "read_update_message_cache ignores notices older than current script" {
+	run bash --noprofile --norc <<'EOF'
+set -euo pipefail
+HOME="$(mktemp -d)"
+export HOME MOLE_TEST_MODE=1 MOLE_SKIP_MAIN=1
+mkdir -p "$HOME/.cache/mole"
+msg_cache="$HOME/.cache/mole/update_message"
+printf 'Update 1.43.0 available, run mo update\n' > "$msg_cache"
+touch -t 200001010000 "$msg_cache"
+source "$PROJECT_ROOT/mole"
+message="$(read_update_message_cache "$msg_cache")"
+[[ -z "$message" ]]
+[[ ! -s "$msg_cache" ]]
+EOF
+
+	[ "$status" -eq 0 ]
+}
+
 @test "interactive_main_menu accepts U shortcut when update notice is visible" {
 	run bash --noprofile --norc <<'EOF'
 set -euo pipefail
@@ -683,4 +701,48 @@ assert mem['total'] > 0, 'memory total should be positive'
 	# When piped (not a tty), status should auto-detect and output JSON
 	output=$("$STATUS_BIN" 2>/dev/null)
 	echo "$output" | python3 -c "import sys, json; json.load(sys.stdin)"
+}
+
+@test "mo status --watch streams newline-delimited JSON" {
+	if [[ ! -x "${STATUS_BIN:-}" ]]; then
+		skip "status binary not available (go not installed?)"
+	fi
+
+	run python3 - "$STATUS_BIN" <<'PY'
+import json
+import subprocess
+import sys
+
+status_bin = sys.argv[1]
+proc = subprocess.Popen(
+    [status_bin, "--watch", "--interval", "200ms"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+)
+lines = []
+try:
+    for _ in range(3):
+        line = proc.stdout.readline()
+        if not line:
+            raise RuntimeError("missing watch output")
+        snapshot = json.loads(line)
+        for key in ("collected_at", "cpu", "memory", "disk_io", "network", "health_score"):
+            if key not in snapshot:
+                raise RuntimeError(f"missing key: {key}")
+        lines.append(snapshot)
+finally:
+    proc.terminate()
+    try:
+        proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=3)
+
+if proc.stderr.read():
+    raise RuntimeError("watch wrote to stderr")
+print(f"watch_lines={len(lines)}")
+PY
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"watch_lines=3"* ]]
 }

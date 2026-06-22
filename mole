@@ -48,7 +48,7 @@ source "$SCRIPT_DIR/lib/core/commands.sh"
 trap cleanup_temp_files EXIT INT TERM
 
 # Version and update helpers
-VERSION="1.43.1"
+VERSION="1.44.0"
 MOLE_TAGLINE="Deep clean and optimize your Mac."
 
 is_touchid_configured() {
@@ -211,6 +211,37 @@ get_latest_commit_from_github() {
         "https://api.github.com/repos/tw93/mole/commits/main" 2> /dev/null |
         grep '"sha"[[:space:]]*:[[:space:]]*"[0-9a-f]\{40\}"' | head -1 | sed -E 's/.*"sha"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/') || sha=""
     echo "$sha"
+}
+
+mole_update_message_cache_is_current() {
+    local msg_cache="$1"
+    [[ -f "$msg_cache" && -s "$msg_cache" ]] || return 1
+
+    local mole_path
+    mole_path=$(resolve_mole_source_path || true)
+    [[ -n "$mole_path" && -e "$mole_path" ]] || return 0
+
+    local cache_mtime mole_mtime
+    cache_mtime=$(get_file_mtime "$msg_cache")
+    mole_mtime=$(get_file_mtime "$mole_path")
+
+    if [[ "$cache_mtime" =~ ^[0-9]+$ && "$mole_mtime" =~ ^[0-9]+$ &&
+        "$cache_mtime" -gt 0 && "$mole_mtime" -gt 0 &&
+        "$cache_mtime" -lt "$mole_mtime" ]]; then
+        return 1
+    fi
+
+    return 0
+}
+
+read_update_message_cache() {
+    local msg_cache="$1"
+    if mole_update_message_cache_is_current "$msg_cache"; then
+        cat "$msg_cache" 2> /dev/null || echo ""
+    else
+        : > "$msg_cache" 2> /dev/null || true
+        echo ""
+    fi
 }
 
 # Background update notice
@@ -530,6 +561,11 @@ update_mole() {
         sudo_keepalive_pid=$(_start_sudo_keepalive)
     fi
 
+    local installer_assume_sudo_auth="0"
+    if [[ "$requires_sudo" == "true" ]]; then
+        installer_assume_sudo_auth="1"
+    fi
+
     if [[ -t 1 ]]; then
         start_inline_spinner "$install_label"
     else
@@ -574,7 +610,7 @@ update_mole() {
     fi
 
     if [[ "$nightly_update" == "true" ]]; then
-        if install_output=$(MOLE_VERSION="main" "$tmp_installer" --prefix "$install_dir" --config "$config_dir" 2>&1); then
+        if install_output=$(MOLE_ASSUME_SUDO_AUTH="$installer_assume_sudo_auth" MOLE_VERSION="main" "$tmp_installer" --prefix "$install_dir" --config "$config_dir" 2>&1); then
             process_install_output "$install_output" "$latest" "$final_success_label"
         else
             if [[ -t 1 ]]; then stop_inline_spinner; fi
@@ -585,7 +621,7 @@ update_mole() {
             exit 1
         fi
     elif [[ "$force_update" == "true" || "$switch_to_stable_channel" == "true" ]]; then
-        if install_output=$(MOLE_VERSION="$update_tag" "$tmp_installer" --prefix "$install_dir" --config "$config_dir" 2>&1); then
+        if install_output=$(MOLE_ASSUME_SUDO_AUTH="$installer_assume_sudo_auth" MOLE_VERSION="$update_tag" "$tmp_installer" --prefix "$install_dir" --config "$config_dir" 2>&1); then
             process_install_output "$install_output" "$latest" "$final_success_label"
         else
             if [[ -t 1 ]]; then stop_inline_spinner; fi
@@ -596,10 +632,10 @@ update_mole() {
             exit 1
         fi
     else
-        if install_output=$(MOLE_VERSION="$update_tag" "$tmp_installer" --prefix "$install_dir" --config "$config_dir" --update 2>&1); then
+        if install_output=$(MOLE_ASSUME_SUDO_AUTH="$installer_assume_sudo_auth" MOLE_VERSION="$update_tag" "$tmp_installer" --prefix "$install_dir" --config "$config_dir" --update 2>&1); then
             process_install_output "$install_output" "$latest" "$final_success_label"
         else
-            if install_output=$(MOLE_VERSION="$update_tag" "$tmp_installer" --prefix "$install_dir" --config "$config_dir" 2>&1); then
+            if install_output=$(MOLE_ASSUME_SUDO_AUTH="$installer_assume_sudo_auth" MOLE_VERSION="$update_tag" "$tmp_installer" --prefix "$install_dir" --config "$config_dir" 2>&1); then
                 process_install_output "$install_output" "$latest" "$final_success_label"
             else
                 if [[ -t 1 ]]; then stop_inline_spinner; fi
@@ -917,9 +953,7 @@ interactive_main_menu() {
     brand_banner="$(show_brand_banner)"
     MAIN_MENU_BANNER="$brand_banner"
 
-    if [[ -f "$msg_cache" && -s "$msg_cache" ]]; then
-        update_message="$(cat "$msg_cache" 2> /dev/null || echo "")"
-    fi
+    update_message="$(read_update_message_cache "$msg_cache")"
     MAIN_MENU_UPDATE_MESSAGE="$update_message"
     MAIN_MENU_SHOW_UPDATE="$([[ -n "$update_message" ]] && echo true || echo false)"
 
