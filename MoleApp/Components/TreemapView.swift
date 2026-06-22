@@ -1,10 +1,5 @@
 import SwiftUI
 
-/// Squarified treemap layout for disk-usage visualisation.
-///
-/// Architecture: Canvas renders visuals; a single NSView overlay handles
-/// all pointer events by mapping coordinates to blocks manually. This
-/// avoids all coordinate-system mismatches between Canvas and SwiftUI.
 struct TreemapView: View {
     let entries: [AnalyzeEntry]
     let totalSize: Int64
@@ -29,20 +24,26 @@ struct TreemapView: View {
                     }
                 }
 
-                TreemapOverlay(
-                    blocks: blocks,
-                    onHover: { path in
-                        withAnimation(.easeInOut(duration: 0.1)) {
-                            hoveredPath = path
-                        }
-                    },
-                    onTap: { path in
-                        if let block = blocks.first(where: { $0.entry.path == path }),
-                           block.entry.isDir {
-                            onDrill(block.entry)
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let loc):
+                            withAnimation(.easeInOut(duration: 0.1)) {
+                                hoveredPath = hitBlock(point: loc)?.entry.path
+                            }
+                        case .ended:
+                            withAnimation { hoveredPath = nil }
                         }
                     }
-                )
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onEnded { value in
+                                if let block = hitBlock(point: value.location), block.entry.isDir {
+                                    onDrill(block.entry)
+                                }
+                            }
+                    )
 
                 if let path = hoveredPath,
                    let block = blocks.first(where: { $0.entry.path == path }) {
@@ -55,8 +56,6 @@ struct TreemapView: View {
         .background(Color(nsColor: .textBackgroundColor).opacity(0.3))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
-
-    // MARK: - Hit testing
 
     private func hitBlock(point: CGPoint) -> Block? {
         for block in blocks {
@@ -75,8 +74,6 @@ struct TreemapView: View {
         blocks = layout(entries: entries, in: size)
     }
 
-    // MARK: - Drawing
-
     private func drawBlock(ctx: GraphicsContext, block: Block) {
         let drawRect = block.rect.insetBy(dx: gap / 2, dy: gap / 2)
         let isHovered = block.entry.path == hoveredPath
@@ -92,7 +89,6 @@ struct TreemapView: View {
                 startPoint: CGPoint(x: drawRect.minX, y: drawRect.minY),
                 endPoint: CGPoint(x: drawRect.maxX, y: drawRect.maxY))
         )
-
         ctx.stroke(
             Path(roundedRect: drawRect, cornerRadius: cornerRadius),
             with: .color(baseColor.opacity(isHovered ? 0.9 : 0.35)),
@@ -146,8 +142,6 @@ struct TreemapView: View {
         case .critical: return Color(red: 0.90, green: 0.30, blue: 0.30)
         }
     }
-
-    // MARK: - Layout
 
     struct Block {
         let entry: AnalyzeEntry
@@ -262,8 +256,6 @@ struct TreemapView: View {
         return result
     }
 
-    // MARK: - Tooltip
-
     private func tooltip(for block: Block, in size: CGSize) -> some View {
         let rect = block.rect
         let tipW: CGFloat = 200
@@ -290,83 +282,9 @@ struct TreemapView: View {
         .allowsHitTesting(false)
     }
 
-    // MARK: - Tone
-
     private func toneFor(_ entry: AnalyzeEntry) -> StatusTone {
         if entry.cleanable ?? false { return .good }
         if entry.insight ?? false { return .warn }
         return .neutral
-    }
-}
-
-// MARK: - NSView overlay for pointer events
-
-private struct TreemapOverlay: NSViewRepresentable {
-    let blocks: [TreemapView.Block]
-    let onHover: (String?) -> Void
-    let onTap: (String?) -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(blocks: blocks, onHover: onHover, onTap: onTap)
-    }
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        let trackingArea = NSTrackingArea(
-            rect: .zero,
-            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: context.coordinator,
-            userInfo: nil
-        )
-        view.addTrackingArea(trackingArea)
-        view.wantsLayer = true
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.blocks = blocks
-        context.coordinator.onHover = onHover
-        context.coordinator.onTap = onTap
-    }
-
-    class Coordinator: NSObject {
-        var blocks: [TreemapView.Block]
-        var onHover: (String?) -> Void
-        var onTap: (String?) -> Void
-
-        init(blocks: [TreemapView.Block], onHover: @escaping (String?) -> Void, onTap: @escaping (String?) -> Void) {
-            self.blocks = blocks
-            self.onHover = onHover
-            self.onTap = onTap
-        }
-
-        override func mouseMoved(with event: NSEvent) {
-            guard let view = event.window?.contentView else { return }
-            let point = view.convert(event.locationInWindow, from: nil)
-            let flipped = CGPoint(x: point.x, y: view.bounds.height - point.y)
-            onHover?(hitBlock(at: flipped))
-        }
-
-        override func mouseExited(with event: NSEvent) {
-            onHover?(nil)
-        }
-
-        override func mouseDown(with event: NSEvent) {
-            guard let view = event.window?.contentView else { return }
-            let point = view.convert(event.locationInWindow, from: nil)
-            let flipped = CGPoint(x: point.x, y: view.bounds.height - point.y)
-            onTap?(hitBlock(at: flipped))
-        }
-
-        private func hitBlock(at point: CGPoint) -> String? {
-            for block in blocks {
-                let r = block.rect
-                if point.x >= r.minX, point.x <= r.maxX,
-                   point.y >= r.minY, point.y <= r.maxY {
-                    return block.entry.path
-                }
-            }
-            return nil
-        }
     }
 }
