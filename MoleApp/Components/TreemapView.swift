@@ -52,10 +52,12 @@ struct TreemapView: View {
 
     private func hitTestRect(for block: Block) -> some View {
         let inset = block.rect.insetBy(dx: gap / 2, dy: gap / 2)
+        let centerX = inset.minX + inset.width / 2
+        let centerY = inset.minY + inset.height / 2
         return Rectangle()
             .fill(Color.white.opacity(0.001))
             .frame(width: inset.width, height: inset.height)
-            .offset(x: inset.minX, y: inset.minY)
+            .position(x: centerX, y: centerY)
             .contentShape(Rectangle())
             .onHover { hovering in
                 withAnimation(.easeInOut(duration: 0.12)) {
