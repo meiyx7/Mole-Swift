@@ -21,7 +21,7 @@ struct OptimizeView: View {
                     (loc.t("网络缓存刷新", "Network Cache Refresh"), loc.t("优化 DNS 缓存并重启 mDNSResponder", "Optimize DNS cache & restart mDNSResponder"), "wifi"),
                     // Advanced optimizations
                     (loc.t("数据库优化", "Database Optimization"), loc.t("压缩 Mail、Safari、Messages 的 SQLite 数据库", "Compress SQLite databases for Mail, Safari & Messages"), "cylinder.split"),
-                    (loc.t("LaunchServices 修复", "LaunchServices Repair"), loc.t("修复"打开方式"菜单与文件关联", "Repair \"Open with\" menu & file associations"), "list.bullet.rectangle"),
+                    (loc.t("LaunchServices 修复", "LaunchServices Repair"), loc.t("修复「打开方式」菜单与文件关联", "Repair \"Open with\" menu & file associations"), "list.bullet.rectangle"),
                     (loc.t("Dock 刷新", "Dock Refresh"), loc.t("修复 Dock 中损坏的图标和视觉故障", "Fix broken icons and visual glitches in the Dock"), "dock.arrow.up.rectangle"),
                     (loc.t("阻止 .DS_Store", "Prevent Finder .DS_Store"), loc.t("阻止 Finder 在网络和 USB 卷上写入 .DS_Store", "Stop Finder writing .DS_Store on network/USB volumes"), "nosign"),
                     // System performance
