@@ -38,10 +38,15 @@ jobs:
         working-directory: MoleTauri
         run: npx tauri build
 
+      - name: Package .app into zip
+        working-directory: MoleTauri/src-tauri/target/release/bundle/macos
+        run: |
+          ditto -c -k --keepParent Mole.app Mole-Tauri-macOS.zip
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: Mole-Tauri-macOS
-          path: MoleTauri/src-tauri/target/release/bundle/dmg/*.dmg
+          path: MoleTauri/src-tauri/target/release/bundle/macos/Mole-Tauri-macOS.zip
           if-no-files-found: error
           retention-days: 30
