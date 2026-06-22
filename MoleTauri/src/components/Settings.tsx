@@ -25,7 +25,7 @@ export default function Settings() {
         </div>
         <div className="settings-row">
           <span className="settings-label">GUI 版本</span>
-          <span className="settings-value">0.1.0 (Tauri)</span>
+          <span className="settings-value">0.2.0 (Tauri)</span>
         </div>
         <div className="settings-row">
           <span className="settings-label">CLI 版本</span>

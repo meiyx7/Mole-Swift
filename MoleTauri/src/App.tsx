@@ -6,6 +6,7 @@ import Status from './components/Status';
 import Optimize from './components/Optimize';
 import Uninstall from './components/Uninstall';
 import Settings from './components/Settings';
+import UpdateChecker from './components/UpdateChecker';
 
 type Page = 'clean' | 'analyze' | 'status' | 'optimize' | 'uninstall' | 'settings';
 
@@ -27,6 +28,7 @@ export default function App() {
     <div className="app">
       <Sidebar current={page} onNavigate={setPage} />
       <main className="main-content">
+        <UpdateChecker />
         {renderPage()}
       </main>
     </div>

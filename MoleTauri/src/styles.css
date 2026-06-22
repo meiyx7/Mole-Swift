@@ -480,3 +480,30 @@ body {
   color: var(--red);
   font-size: 14px;
 }
+
+/* Update banner */
+.update-banner {
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, #f0f7ff, #e8f4fd);
+  border: 1px solid #d0e3f7;
+  font-size: 13px;
+}
+
+.update-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.update-text {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.update-text.muted {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
