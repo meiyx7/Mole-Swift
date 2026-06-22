@@ -195,22 +195,29 @@ struct TreemapView: View {
 
     private func drawBlock(ctx: GraphicsContext, block: Block) {
         let rect = block.rect
+        let insetRect = rect.insetBy(dx: 1, dy: 1)
         let isHovered = block.entry.path == hoveredPath
         let baseColor = Theme.color(for: block.tone)
 
-        // LinearGradient conforms to GraphicsContext.Shading, so it can be
-        // passed directly to ctx.fill(with:). No need for .linearGradient()
-        // wrapper (that overload expects a Gradient + explicit endpoints).
-        let fill = LinearGradient(
-            colors: [baseColor.opacity(isHovered ? 0.85 : 0.55),
-                     baseColor.opacity(isHovered ? 0.65 : 0.35)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+        // Use GraphicsContext.Shading.linearGradient which takes a Gradient
+        // plus explicit CGPoint endpoints. LinearGradient itself is not a
+        // Shading. Pure colour would also work but the subtle gradient adds
+        // depth without obscuring relative sizes.
+        let gradient = Gradient(colors: [
+            baseColor.opacity(isHovered ? 0.85 : 0.55),
+            baseColor.opacity(isHovered ? 0.65 : 0.35)
+        ])
+        ctx.fill(
+            Path(roundedRect: insetRect, cornerRadius: 3),
+            with: .linearGradient(
+                gradient,
+                startPoint: CGPoint(x: insetRect.minX, y: insetRect.minY),
+                endPoint: CGPoint(x: insetRect.maxX, y: insetRect.maxY)
+            )
         )
-        ctx.fill(Path(roundedRect: rect.insetBy(dx: 1, dy: 1), cornerRadius: 3), with: fill)
 
         let borderColor = isHovered ? baseColor : baseColor.opacity(0.4)
-        ctx.stroke(Path(roundedRect: rect.insetBy(dx: 1, dy: 1), cornerRadius: 3),
+        ctx.stroke(Path(roundedRect: insetRect, cornerRadius: 3),
                    with: .color(borderColor), lineWidth: isHovered ? 1.5 : 0.5)
 
         let minDim = min(rect.width, rect.height)
