@@ -71,7 +71,7 @@ struct TreemapView: View {
             }
         }
         .frame(width: drawRect.width, height: drawRect.height)
-        .position(x: drawRect.midX, y: drawRect.midY)
+        .offset(x: drawRect.minX, y: drawRect.minY)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.12)) {
                 hoveredPath = hovering ? block.entry.path : nil
