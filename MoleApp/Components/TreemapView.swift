@@ -1,10 +1,11 @@
 import SwiftUI
+import AppKit
 
 /// Squarified treemap layout for disk-usage visualisation.
 ///
-/// Architecture: Canvas renders visuals; one transparent overlay handles
+/// Architecture: Canvas renders visuals; a single NSView overlay handles
 /// all pointer events by mapping coordinates to blocks manually. This
-/// eliminates all coordinate-system mismatches.
+/// avoids all coordinate-system mismatches between Canvas and SwiftUI.
 struct TreemapView: View {
     let entries: [AnalyzeEntry]
     let totalSize: Int64
@@ -29,26 +30,20 @@ struct TreemapView: View {
                     }
                 }
 
-                Color.white.opacity(0.001)
-                    .onContinuousHover { phase in
-                        switch phase {
-                        case .active(let loc):
-                            withAnimation(.easeInOut(duration: 0.1)) {
-                                hoveredPath = hitBlock(point: loc)?.entry.path
-                            }
-                        case .ended:
-                            withAnimation { hoveredPath = nil }
+                TreemapOverlay(
+                    blocks: blocks,
+                    onHover: { path in
+                        withAnimation(.easeInOut(duration: 0.1)) {
+                            hoveredPath = path
+                        }
+                    },
+                    onTap: { path in
+                        if let block = blocks.first(where: { $0.entry.path == path }),
+                           block.entry.isDir {
+                            onDrill(block.entry)
                         }
                     }
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onEnded { value in
-                                let loc = value.location
-                                if let block = hitBlock(point: loc), block.entry.isDir {
-                                    onDrill(block.entry)
-                                }
-                            }
-                    )
+                )
 
                 if let path = hoveredPath,
                    let block = blocks.first(where: { $0.entry.path == path }) {
@@ -302,5 +297,79 @@ struct TreemapView: View {
         if entry.cleanable ?? false { return .good }
         if entry.insight ?? false { return .warn }
         return .neutral
+    }
+}
+
+// MARK: - NSView overlay for pointer events
+
+/// Transparent NSView that tracks mouse position and click, mapping
+/// coordinates to treemap blocks. This avoids all SwiftUI layout
+/// coordinate mismatches.
+private struct TreemapOverlay: NSViewRepresentable {
+    let blocks: [TreemapView.Block]
+    let onHover: (String?) -> Void
+    let onTap: (String?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = OverlayView()
+        view.blocks = blocks
+        view.onHover = onHover
+        view.onTap = onTap
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let view = nsView as? OverlayView else { return }
+        view.blocks = blocks
+        view.onHover = onHover
+        view.onTap = onTap
+    }
+
+    class OverlayView: NSView {
+        var blocks: [TreemapView.Block] = []
+        var onHover: ((String?) -> Void)?
+        var onTap: ((String?) -> Void)?
+
+        override var acceptsFirstResponder: Bool { true }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            for area in trackingAreas {
+                removeTrackingArea(area)
+            }
+            addTrackingArea(NSTrackingArea(
+                rect: bounds,
+                options: [.mouseMoved, .activeInKeyWindow],
+                owner: self,
+                userInfo: nil
+            ))
+        }
+
+        override func mouseMoved(with event: NSEvent) {
+            let point = convert(event.locationInWindow, from: nil)
+            let flipped = CGPoint(x: point.x, y: bounds.height - point.y)
+            onHover?(hitBlock(at: flipped))
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            onHover?(nil)
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            let point = convert(event.locationInWindow, from: nil)
+            let flipped = CGPoint(x: point.x, y: bounds.height - point.y)
+            onTap?(hitBlock(at: flipped))
+        }
+
+        private func hitBlock(at point: CGPoint) -> String? {
+            for block in blocks {
+                let r = block.rect
+                if point.x >= r.minX, point.x <= r.maxX,
+                   point.y >= r.minY, point.y <= r.maxY {
+                    return block.entry.path
+                }
+            }
+            return nil
+        }
     }
 }
