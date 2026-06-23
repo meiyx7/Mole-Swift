@@ -216,14 +216,27 @@ struct HistoryView: View {
 
     private func sessionRow(_ session: HistorySession) -> some View {
         let isExpanded = vm.expanded.contains(session.id)
+        // dry-run 预览会话：没有实际删除操作但 items>0
+        // CLI 在 dry-run 下也会写 operations.log，记录的是预览数字
+        let isDryRunPreview = (session.actions.removed + session.actions.trashed == 0) && session.items > 0
         return VStack(alignment: .leading, spacing: 0) {
             Button { vm.toggle(session.id) } label: {
                 HStack(spacing: 12) {
                     Image(systemName: commandIcon(session.command))
-                        .foregroundColor(Theme.accent).frame(width: 20)
+                        .foregroundColor(isDryRunPreview ? .secondary : Theme.accent)
+                        .frame(width: 20)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(session.command.capitalized)
-                            .font(.system(size: 13, weight: .semibold))
+                        HStack(spacing: 6) {
+                            Text(session.command.capitalized)
+                                .font(.system(size: 13, weight: .semibold))
+                            if isDryRunPreview {
+                                Text(loc.t("仅预览", "Preview"))
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(Color.gray.opacity(0.2), in: Capsule())
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                         Text(session.startedAt)
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundColor(.secondary)
@@ -232,9 +245,10 @@ struct HistoryView: View {
                     VStack(alignment: .trailing, spacing: 1) {
                         Text(loc.t("\(session.items) 项", "\(session.items) items"))
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundColor(isDryRunPreview ? .secondary : .primary)
                         Text(session.size)
                             .font(.system(size: 11, design: .rounded))
-                            .foregroundColor(.green)
+                            .foregroundColor(isDryRunPreview ? .secondary : .green)
                     }
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10)).foregroundColor(Color.gray.opacity(0.5))
