@@ -11,6 +11,7 @@ import { RingGauge, LineChart } from '../components/charts';
 import { runStatusJson, type StatusSnapshot } from '../lib/cli';
 import { status as t, common } from '../lib/i18n';
 import { formatBytes, formatBytesShort, formatUptime, formatNumber, asArray, asNumber, arrayGet } from '../lib/format';
+import { writeLog } from '../lib/cli';
 
 const REFRESH_INTERVAL = 5000;
 
@@ -26,7 +27,10 @@ export default function StatusPage() {
       setSnapshot(data);
       setError(null);
     } catch (e: any) {
-      setError(e?.message ?? String(e));
+      const msg = e?.message ?? String(e);
+      setError(msg);
+      // 写入应用日志，方便在日志页面查看首页报错原因
+      writeLog('error', `Status 页面加载失败: ${msg}`).catch(() => {});
     } finally {
       setLoading(false);
     }

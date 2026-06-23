@@ -2,7 +2,7 @@
 // 加载应用列表，支持搜索/排序/多选，流式执行卸载
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardHeader, Button, Badge, Checkbox, EmptyState, Spinner, Modal, ConsoleOutput } from '../components/ui';
-import { listApps, runUninstallStreaming, type AppListEntry, type StreamingLine } from '../lib/cli';
+import { listApps, runUninstallStreaming, writeLog, type AppListEntry, type StreamingLine } from '../lib/cli';
 import { uninstall as t, common } from '../lib/i18n';
 import { formatBytes, formatKB, formatRelativeTime } from '../lib/format';
 
@@ -16,11 +16,11 @@ function iconColor(name: string): string {
 }
 
 function sourceMeta(source: string): { tone: 'accent' | 'info' | 'default'; label: string } {
-  switch (source) {
-    case 'brew': return { tone: 'accent', label: t.brew() };
-    case 'appstore': return { tone: 'info', label: t.appStore() };
-    default: return { tone: 'default', label: t.manual() };
-  }
+  // CLI 返回的 source 值是 "App" / "Homebrew"，也兼容历史值 "brew" / "appstore"
+  const s = (source || '').toLowerCase();
+  if (s === 'brew' || s === 'homebrew') return { tone: 'accent', label: t.brew() };
+  if (s === 'appstore' || s === 'app store') return { tone: 'info', label: t.appStore() };
+  return { tone: 'default', label: t.manual() };
 }
 
 function appKey(app: AppListEntry): string {
@@ -45,8 +45,11 @@ export default function UninstallPage() {
     try {
       const list = await listApps();
       setApps(list);
+      writeLog('info', `卸载页面加载应用列表成功，共 ${list.length} 个应用`).catch(() => {});
     } catch (e: any) {
-      setError(e?.message ?? String(e));
+      const msg = e?.message ?? String(e);
+      setError(msg);
+      writeLog('error', `卸载页面加载应用列表失败: ${msg}`).catch(() => {});
     } finally {
       setLoading(false);
     }

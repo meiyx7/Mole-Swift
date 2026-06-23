@@ -387,13 +387,16 @@ pub fn restart_app() {
 
 /// 获取已安装应用列表，返回解析后的 `AppListEntry` 数组。
 ///
-/// 调用 `mo uninstall --list --json` 并解析 JSON。失败时返回原始
-/// `CommandOutput` 的 stderr。
+/// 调用 `mo uninstall --list` 并解析 JSON。CLI 在 stdout 被管道/重定向时
+/// 自动切换到 JSON 输出（`[[ ! -t 1 ]]`），不需要也不支持 `--json` 参数。
+/// 失败时返回原始 `CommandOutput` 的 stderr。
 #[tauri::command]
 pub async fn list_apps() -> Result<Vec<AppListEntry>, String> {
     tauri::async_runtime::spawn_blocking(|| {
-        let output = cli::run_mo(&["uninstall", "--list", "--json"]);
+        let output = cli::run_mo(&["uninstall", "--list"]);
         if !output.success {
+            let err_msg = format!("mo uninstall --list 失败: {}", output.stderr);
+            crate::logger::log(crate::logger::LogLevel::Error, &err_msg);
             return Err(output.stderr);
         }
         let trimmed = output.stdout.trim();
@@ -401,7 +404,11 @@ pub async fn list_apps() -> Result<Vec<AppListEntry>, String> {
             return Ok(Vec::new());
         }
         serde_json::from_str::<Vec<AppListEntry>>(trimmed)
-            .map_err(|e| format!("解析应用列表失败: {} (原始输出: {})", e, trimmed))
+            .map_err(|e| {
+                let msg = format!("解析应用列表失败: {} (原始输出前200字符: {})", e, &trimmed[..trimmed.len().min(200)]);
+                crate::logger::log(crate::logger::LogLevel::Error, &msg);
+                msg
+            })
     })
     .await
     .map_err(|e| format!("任务失败: {}", e))?

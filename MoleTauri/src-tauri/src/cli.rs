@@ -149,6 +149,13 @@ where
     let resolved = if bin == "mo" { resolve_mo() } else { None };
     let actual_bin = resolved.unwrap_or(bin);
 
+    // 记录命令调用日志
+    let args_str = args.join(" ");
+    crate::logger::log(
+        crate::logger::LogLevel::Info,
+        &format!("执行命令: {} {}", actual_bin, args_str),
+    );
+
     let mut cmd = Command::new(actual_bin);
     cmd.args(args);
     cmd.env(NON_INTERACTIVE_ENV.0, NON_INTERACTIVE_ENV.1);
@@ -167,10 +174,12 @@ where
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
+            let msg = format!("无法启动 {}: {}", bin, e);
+            crate::logger::log(crate::logger::LogLevel::Error, &msg);
             return CommandOutput {
                 success: false,
                 stdout: String::new(),
-                stderr: format!("无法启动 {}: {}", bin, e),
+                stderr: msg,
                 exit_code: -1,
             };
         }
@@ -211,18 +220,35 @@ where
     let status = match child.wait() {
         Ok(s) => s,
         Err(e) => {
+            let msg = format!("等待进程退出失败: {}", e);
+            crate::logger::log(crate::logger::LogLevel::Error, &msg);
             return CommandOutput {
                 success: false,
                 stdout,
-                stderr: format!("等待进程退出失败: {}", e),
+                stderr: msg,
                 exit_code: -1,
             };
         }
     };
 
     let code = status.code().unwrap_or(-1);
+    let success = status.success();
+
+    // 记录命令结果日志（失败时记录 stderr）
+    if !success {
+        let stderr_preview = if stderr.len() > 500 {
+            format!("{}...(截断)", &stderr[..500])
+        } else {
+            stderr.clone()
+        };
+        crate::logger::log(
+            crate::logger::LogLevel::Warn,
+            &format!("命令失败 (exit={}): {} {} | stderr: {}", code, bin, args_str, stderr_preview),
+        );
+    }
+
     CommandOutput {
-        success: status.success(),
+        success,
         stdout,
         stderr,
         exit_code: code,

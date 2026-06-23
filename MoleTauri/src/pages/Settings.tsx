@@ -80,8 +80,12 @@ export default function SettingsPage() {
     setUpdateStatus('downloading');
     setUpdateError('');
     try {
-      await downloadAndInstall(updateInfo.download_url);
+      // download_and_install 现在在应用内完成下载+解压+替换+重启，
+      // 成功时进程会 exit(0)，不会返回；返回则说明出错。
+      const result = await downloadAndInstall(updateInfo.download_url);
+      // 如果走到这里，说明没有自动退出（可能是测试模式或出错）
       setUpdateStatus('ready');
+      void result;
     } catch (e) {
       setUpdateError(e instanceof Error ? e.message : String(e));
       setUpdateStatus('error');
@@ -218,7 +222,7 @@ export default function SettingsPage() {
         {updateStatus === 'downloading' && (
           <div className="flex items-center gap-2">
             <Spinner size="sm" />
-            <span>{t.downloading()}...</span>
+            <span>{t.downloading()}...（下载完成后将自动安装并重启）</span>
           </div>
         )}
         {updateStatus === 'ready' && (
