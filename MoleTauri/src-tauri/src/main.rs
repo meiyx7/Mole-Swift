@@ -7,6 +7,7 @@
 mod cli;
 mod commands;
 mod installer;
+mod logger;
 mod models;
 mod purge;
 mod trash;
@@ -14,6 +15,9 @@ mod update;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 fn main() {
+    // 记录启动日志
+    logger::log(logger::LogLevel::Info, &format!("Mole Tauri v{} 启动", env!("CARGO_PKG_VERSION")));
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             // 清理类命令
@@ -44,6 +48,11 @@ fn main() {
             // 更新检查
             commands::check_for_update,
             commands::download_and_install,
+            // 日志
+            commands::read_app_log,
+            commands::clear_app_log,
+            commands::app_log_path,
+            commands::write_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

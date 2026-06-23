@@ -15,6 +15,7 @@
 
 use crate::cli;
 use crate::installer;
+use crate::logger;
 use crate::models::{
     AppListEntry, CommandOutput, InstallerScanResult, PurgeScanResult, UpdateInfo,
 };
@@ -404,6 +405,44 @@ pub async fn list_apps() -> Result<Vec<AppListEntry>, String> {
     })
     .await
     .map_err(|e| format!("任务失败: {}", e))?
+}
+
+// ---------------------------------------------------------------------------
+// 日志
+// ---------------------------------------------------------------------------
+
+/// 读取应用日志文件内容。
+///
+/// `tail` 指定只返回最后 N 行（0 或负数表示全部）。
+#[tauri::command]
+pub fn read_app_log(tail: Option<i64>) -> String {
+    logger::read_log(tail.unwrap_or(0))
+}
+
+/// 清空应用日志文件。
+#[tauri::command]
+pub fn clear_app_log() -> Result<String, String> {
+    logger::clear_log()?;
+    Ok("日志已清空".to_string())
+}
+
+/// 返回日志文件路径（供前端显示）。
+#[tauri::command]
+pub fn app_log_path() -> String {
+    logger::log_path().to_string_lossy().to_string()
+}
+
+/// 写入一条日志（供前端在关键操作时记录）。
+#[tauri::command]
+pub fn write_log(level: String, message: String) {
+    let lvl = match level.to_lowercase().as_str() {
+        "trace" => logger::LogLevel::Trace,
+        "debug" => logger::LogLevel::Debug,
+        "warn" => logger::LogLevel::Warn,
+        "error" => logger::LogLevel::Error,
+        _ => logger::LogLevel::Info,
+    };
+    logger::log(lvl, &message);
 }
 
 #[cfg(test)]

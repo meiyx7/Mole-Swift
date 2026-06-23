@@ -11,6 +11,7 @@ import UninstallPage from './pages/Uninstall';
 import PurgePage from './pages/Purge';
 import InstallerPage from './pages/Installer';
 import HistoryPage from './pages/History';
+import LogsPage from './pages/Logs';
 import SettingsPage from './pages/Settings';
 
 export type Page =
@@ -22,6 +23,7 @@ export type Page =
   | 'purge'
   | 'installer'
   | 'history'
+  | 'logs'
   | 'settings';
 
 function Shell() {
@@ -45,6 +47,7 @@ function Shell() {
       case 'purge': return <PurgePage />;
       case 'installer': return <InstallerPage />;
       case 'history': return <HistoryPage />;
+      case 'logs': return <LogsPage />;
       case 'settings': return <SettingsPage />;
       default: return <StatusPage />;
     }

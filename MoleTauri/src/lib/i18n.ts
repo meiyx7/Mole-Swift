@@ -40,6 +40,7 @@ export const titles = {
   installer: () => t('安装包', 'Installer'),
   uninstall: () => t('卸载', 'Uninstall'),
   history: () => t('历史', 'History'),
+  logs: () => t('日志', 'Logs'),
   settings: () => t('设置', 'Settings'),
 };
 
@@ -52,6 +53,7 @@ export const subtitles = {
   installer: () => t('安装包文件发现与清理', 'Installer file discovery and cleanup'),
   uninstall: () => t('安全卸载应用及残留', 'Safely uninstall apps and leftovers'),
   history: () => t('操作历史与删除审计', 'Operation history and deletion audit'),
+  logs: () => t('应用运行日志', 'Application runtime logs'),
   settings: () => t('应用配置与关于', 'App configuration and about'),
 };
 

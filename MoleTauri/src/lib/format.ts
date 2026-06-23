@@ -45,6 +45,7 @@ export function formatDuration(seconds: number): string {
 }
 
 export function formatUptime(seconds: number): string {
+  if (seconds == null || isNaN(seconds) || seconds < 0) return '—';
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);

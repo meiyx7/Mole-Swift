@@ -226,7 +226,7 @@ export async function runClean(dryRun: boolean, verbose: boolean): Promise<Comma
 export async function runAnalyze(path?: string): Promise<AnalyzeResult> {
   const res = await invoke<CommandOutput>('run_analyze', { path: path || null });
   if (!res.success) throw new Error(res.stderr || 'Analyze failed');
-  return JSON.parse(res.stdout);
+  return parseJsonObject<AnalyzeResult>(res.stdout);
 }
 
 export async function runStatus(json: boolean): Promise<CommandOutput> {
@@ -236,7 +236,29 @@ export async function runStatus(json: boolean): Promise<CommandOutput> {
 export async function runStatusJson(): Promise<StatusSnapshot> {
   const res = await invoke<CommandOutput>('run_status', { json: true });
   if (!res.success) throw new Error(res.stderr || 'Status failed');
-  return JSON.parse(res.stdout);
+  return parseJsonObject<StatusSnapshot>(res.stdout);
+}
+
+/// 从可能包含非 JSON 前缀/后缀的字符串中提取并解析 JSON 对象。
+/// `mo status --json` 可能在 JSON 前输出日志行，这里找到第一个 `{`
+/// 并匹配到最后一个 `}` 来提取 JSON 主体。
+export function parseJsonObject<T>(raw: string): T {
+  const trimmed = raw.trim();
+  if (!trimmed) throw new Error('输出为空');
+  // 快速路径：整个字符串就是合法 JSON
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // fall through to extraction
+  }
+  // 慢路径：提取第一个 { 到最后一个 }
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('输出中未找到 JSON 对象');
+  }
+  const jsonStr = trimmed.slice(start, end + 1);
+  return JSON.parse(jsonStr);
 }
 
 export async function runOptimize(dryRun: boolean): Promise<CommandOutput> {
@@ -262,7 +284,7 @@ export async function runHistory(json: boolean, limit: number): Promise<CommandO
 export async function runHistoryJson(limit: number): Promise<HistoryResult> {
   const res = await invoke<CommandOutput>('run_history', { json: true, limit });
   if (!res.success) throw new Error(res.stderr || 'History failed');
-  return JSON.parse(res.stdout);
+  return parseJsonObject<HistoryResult>(res.stdout);
 }
 
 export async function runTouchid(action: string, dryRun: boolean): Promise<CommandOutput> {
@@ -273,7 +295,7 @@ export async function listApps(): Promise<AppListEntry[]> {
   const res = await invoke<CommandOutput>('list_apps');
   if (!res.success) throw new Error(res.stderr || 'List apps failed');
   try {
-    return JSON.parse(res.stdout);
+    return parseJsonObject<AppListEntry[]>(res.stdout);
   } catch {
     return [];
   }
@@ -372,6 +394,24 @@ export async function downloadAndInstall(url: string): Promise<string> {
 
 export async function restartApp(): Promise<void> {
   await invoke('restart_app');
+}
+
+// ---- 日志 ----
+
+export async function readAppLog(tail?: number): Promise<string> {
+  return invoke<string>('read_app_log', { tail: tail ?? null });
+}
+
+export async function clearAppLog(): Promise<string> {
+  return invoke<string>('clear_app_log');
+}
+
+export async function appLogPath(): Promise<string> {
+  return invoke<string>('app_log_path');
+}
+
+export async function writeLog(level: string, message: string): Promise<void> {
+  await invoke('write_log', { level, message });
 }
 
 // ---- 行分类器（给流式输出着色）----
