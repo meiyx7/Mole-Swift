@@ -2,7 +2,7 @@
 // 加载应用列表，支持搜索/排序/多选，流式执行卸载
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardHeader, Button, Badge, Checkbox, EmptyState, Spinner, Modal, ConsoleOutput } from '../components/ui';
-import { listApps, runUninstallStreaming, writeLog, type AppListEntry, type StreamingLine } from '../lib/cli';
+import { listApps, runUninstallStreaming, writeLog, copyToClipboard, type AppListEntry, type StreamingLine } from '../lib/cli';
 import { uninstall as t, common } from '../lib/i18n';
 import { formatBytes, formatKB, formatRelativeTime } from '../lib/format';
 
@@ -31,6 +31,7 @@ export default function UninstallPage() {
   const [apps, setApps] = useState<AppListEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorCopied, setErrorCopied] = useState(false);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortMode>('size');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -54,6 +55,17 @@ export default function UninstallPage() {
       setLoading(false);
     }
   }, []);
+
+  const copyError = useCallback(async () => {
+    if (!error) return;
+    try {
+      await copyToClipboard(error);
+      setErrorCopied(true);
+      setTimeout(() => setErrorCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  }, [error]);
 
   useEffect(() => {
     loadApps();
@@ -186,8 +198,30 @@ export default function UninstallPage() {
           <EmptyState
             icon="⚠️"
             title={common.error()}
-            description={error}
-            action={<Button variant="primary" onClick={loadApps}>{common.retry()}</Button>}
+            description={
+              <div style={{ textAlign: 'left', width: '100%' }}>
+                <pre style={{
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  fontSize: 12,
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-secondary)',
+                  maxHeight: 300,
+                  overflow: 'auto',
+                  margin: '8px 0',
+                }}>
+                  {error}
+                </pre>
+              </div>
+            }
+            action={
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button variant="primary" onClick={loadApps}>{common.retry()}</Button>
+                <Button variant="ghost" onClick={copyError}>
+                  {errorCopied ? '✓ 已复制' : '复制错误信息'}
+                </Button>
+              </div>
+            }
           />
         </Card>
       )}

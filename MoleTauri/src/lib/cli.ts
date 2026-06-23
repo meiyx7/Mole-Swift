@@ -292,12 +292,14 @@ export async function runTouchid(action: string, dryRun: boolean): Promise<Comma
 }
 
 export async function listApps(): Promise<AppListEntry[]> {
-  const res = await invoke<CommandOutput>('list_apps');
-  if (!res.success) throw new Error(res.stderr || 'List apps failed');
   try {
-    return parseJsonObject<AppListEntry[]>(res.stdout);
-  } catch {
-    return [];
+    // list_apps 返回 Result<Vec, String>，失败时 Tauri 会把 Err 字符串作为
+    // rejected promise 抛出，这里直接拿到完整错误信息。
+    return await invoke<AppListEntry[]>('list_apps');
+  } catch (e) {
+    // e 可能是字符串或 { message } 对象
+    const msg = typeof e === 'string' ? e : (e as any)?.message ?? String(e);
+    throw new Error(msg || 'list_apps 调用失败（无错误信息）');
   }
 }
 

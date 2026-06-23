@@ -389,29 +389,53 @@ pub fn restart_app() {
 ///
 /// 调用 `mo uninstall --list` 并解析 JSON。CLI 在 stdout 被管道/重定向时
 /// 自动切换到 JSON 输出（`[[ ! -t 1 ]]`），不需要也不支持 `--json` 参数。
-/// 失败时返回原始 `CommandOutput` 的 stderr。
+/// 失败时返回包含完整诊断信息的错误字符串。
 #[tauri::command]
 pub async fn list_apps() -> Result<Vec<AppListEntry>, String> {
     tauri::async_runtime::spawn_blocking(|| {
         let output = cli::run_mo(&["uninstall", "--list"]);
         if !output.success {
-            let err_msg = format!("mo uninstall --list 失败: {}", output.stderr);
+            // 拼接完整诊断信息：exit code + stderr + stdout（CLI 可能把错误
+            // 信息输出到 stdout 而非 stderr）
+            let mut parts = Vec::new();
+            parts.push(format!("mo uninstall --list 失败 (exit={})", output.exit_code));
+            if !output.stderr.is_empty() {
+                parts.push(format!("stderr: {}", output.stderr.trim()));
+            }
+            if !output.stdout.is_empty() {
+                let stdout_preview = if output.stdout.len() > 500 {
+                    format!("{}...(截断)", &output.stdout[..500])
+                } else {
+                    output.stdout.trim().to_string()
+                };
+                parts.push(format!("stdout: {}", stdout_preview));
+            }
+            if output.stderr.is_empty() && output.stdout.is_empty() {
+                parts.push("(无输出，可能是 mo 命令不存在或执行异常)".to_string());
+            }
+            let err_msg = parts.join(" | ");
             crate::logger::log(crate::logger::LogLevel::Error, &err_msg);
-            return Err(output.stderr);
+            return Err(err_msg);
         }
         let trimmed = output.stdout.trim();
         if trimmed.is_empty() {
+            crate::logger::log(crate::logger::LogLevel::Info, "应用列表为空");
             return Ok(Vec::new());
         }
         serde_json::from_str::<Vec<AppListEntry>>(trimmed)
             .map_err(|e| {
-                let msg = format!("解析应用列表失败: {} (原始输出前200字符: {})", e, &trimmed[..trimmed.len().min(200)]);
+                let preview = if trimmed.len() > 300 {
+                    &trimmed[..300]
+                } else {
+                    trimmed
+                };
+                let msg = format!("解析应用列表 JSON 失败: {} | 原始输出前300字符: {}", e, preview);
                 crate::logger::log(crate::logger::LogLevel::Error, &msg);
                 msg
             })
     })
     .await
-    .map_err(|e| format!("任务失败: {}", e))?
+    .map_err(|e| format!("后台任务失败: {}", e))?
 }
 
 // ---------------------------------------------------------------------------
