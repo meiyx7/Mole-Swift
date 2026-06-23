@@ -1,7 +1,7 @@
 // Clean 页：三步流程（选项预览 → 审阅 → 执行）
 // 使用 PreviewParser 解析 mo clean --dry-run 流式输出
 import { useState, useRef, useCallback } from 'react';
-import { Card, CardHeader, Button, Badge, Toggle, Checkbox, Steps, Banner, EmptyState, Spinner, ConsoleOutput, StatTile } from '../components/ui';
+import { Card, CardHeader, Button, Badge, Toggle, Steps, Banner, EmptyState, Spinner, ConsoleOutput, StatTile } from '../components/ui';
 import { runCleanStreaming, runClean, type StreamingLine } from '../lib/cli';
 import { PreviewParser, type PreviewSection, type PreviewSummary } from '../lib/previewParser';
 import { clean as t, common } from '../lib/i18n';
@@ -66,14 +66,14 @@ export default function CleanPage() {
       if (result.stdout) {
         result.stdout.split('\n').forEach((text) => {
           if (text.trim()) {
-            setExecLines((prev) => [...prev, { text, type: 'stdout' as const }]);
+            setExecLines((prev) => [...prev, { text, type: 'info' as const }]);
           }
         });
       }
       if (result.stderr) {
         result.stderr.split('\n').forEach((text) => {
           if (text.trim()) {
-            setExecLines((prev) => [...prev, { text, type: 'stderr' as const }]);
+            setExecLines((prev) => [...prev, { text, type: 'error' as const }]);
           }
         });
       }

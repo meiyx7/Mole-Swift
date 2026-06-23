@@ -5,7 +5,7 @@ import { Card, CardHeader, Button, Badge, StatTile, KVList, Spinner, EmptyState 
 import { RingGauge, LineChart } from '../components/charts';
 import { runStatusJson, type StatusSnapshot } from '../lib/cli';
 import { status as t, common } from '../lib/i18n';
-import { formatBytes, formatBytesShort, formatUptime, formatPercent, formatNumber } from '../lib/format';
+import { formatBytes, formatBytesShort, formatUptime, formatNumber } from '../lib/format';
 
 const REFRESH_INTERVAL = 5000;
 
@@ -208,7 +208,7 @@ export default function StatusPage() {
                 unit="/s"
               />
             ) : (
-              <EmptyState title={common.noData()} desc="等待网络历史数据" />
+              <EmptyState title={common.noData()} description="等待网络历史数据" />
             )}
           </div>
           {snapshot.network?.ip && (
@@ -291,7 +291,7 @@ export default function StatusPage() {
               </div>
             ))}
             {(!snapshot.batteries || snapshot.batteries.length === 0) && (
-              <EmptyState title={common.noData()} desc="无电池信息" />
+              <EmptyState title={common.noData()} description="无电池信息" />
             )}
           </div>
         </Card>

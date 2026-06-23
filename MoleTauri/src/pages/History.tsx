@@ -1,17 +1,17 @@
 // History 页：操作历史与删除审计
 // 调用 mo history --json，以时间线展示会话与删除记录
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardHeader, Button, Badge, EmptyState, Spinner, StatTile, KVList } from '../components/ui';
+import { Card, Button, Badge, EmptyState, Spinner, StatTile, KVList } from '../components/ui';
 import { runHistoryJson, type HistoryResult, type HistorySession, type HistoryDeletion } from '../lib/cli';
 import { history as t, common } from '../lib/i18n';
-import { formatBytes, formatDateTime, formatDuration, formatRelativeTime } from '../lib/format';
+import { formatKB, formatDateTime, formatRelativeTime } from '../lib/format';
 
 const HISTORY_LIMIT = 50;
 
 // Badge tone 类型，与 ui.tsx Badge tone 对齐
 type BadgeTone = 'default' | 'good' | 'warn' | 'critical' | 'info' | 'accent' | 'purple';
 
-// 模式 → Badge tone 映射（removed/failed=critical, trashed=warn, skipped=default, rebuilt=info）
+// 模式 → Badge tone 映射
 const MODE_TONE: Record<string, BadgeTone> = {
   removed: 'critical',
   trashed: 'warn',
@@ -29,7 +29,7 @@ export default function HistoryPage() {
   const [result, setResult] = useState<HistoryResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
@@ -48,7 +48,7 @@ export default function HistoryPage() {
     fetchHistory();
   }, [fetchHistory]);
 
-  const toggle = (id: string) => {
+  const toggle = (id: number) => {
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -100,9 +100,17 @@ export default function HistoryPage() {
     );
   }
 
-  const totalSessions = result.total_sessions ?? result.sessions.length;
-  const totalItems = result.total_items ?? 0;
-  const totalSpace = result.total_space ?? 0;
+  const totalSessions = result.sessions.length;
+  const totalItems = result.sessions.reduce((s, sess) => s + (sess.items ?? 0), 0);
+  const totalSizeKB = result.sessions.reduce((s, sess) => {
+    // size 是字符串如 "1.23GB"，尝试解析为 KB 近似值
+    const m = sess.size?.match(/([\d.]+)\s*(GB|MB|KB|B|TB)/i);
+    if (!m) return s;
+    const val = parseFloat(m[1]);
+    const unit = m[2].toUpperCase();
+    const mult: Record<string, number> = { B: 1/1024, KB: 1, MB: 1024, GB: 1024*1024, TB: 1024*1024*1024 };
+    return s + val * (mult[unit] || 0);
+  }, 0);
 
   return (
     <div className="page page-wide history-page">
@@ -118,7 +126,7 @@ export default function HistoryPage() {
         />
         <StatTile
           label={common.total()}
-          value={t.totalSpace(formatBytes(totalSpace))}
+          value={t.totalSpace(formatKB(totalSizeKB))}
         />
       </div>
 
@@ -126,14 +134,33 @@ export default function HistoryPage() {
       <div className="history-timeline">
         {result.sessions.map((session, i) => (
           <HistorySessionCard
-            key={session.session_id}
+            key={i}
             session={session}
-            expanded={expanded.has(session.session_id)}
-            onToggle={() => toggle(session.session_id)}
+            expanded={expanded.has(i)}
+            onToggle={() => toggle(i)}
             isLast={i === result.sessions.length - 1}
           />
         ))}
       </div>
+
+      {/* 顶层删除记录（如果存在） */}
+      {result.deletions && result.deletions.length > 0 && (
+        <Card variant="glass">
+          <div className="history-deletions-section-title">{t.deletions()}</div>
+          <div className="history-deletions-table">
+            <div className="history-deletion-head">
+              <span className="col-ts">{t.timestamp()}</span>
+              <span className="col-path">{t.pathCol()}</span>
+              <span className="col-mode">{t.mode()}</span>
+              <span className="col-status">{t.statusCol()}</span>
+              <span className="col-size">{common.size()}</span>
+            </div>
+            {result.deletions.slice(0, 100).map((d, j) => (
+              <HistoryDeletionRow key={j} deletion={d} />
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -159,7 +186,6 @@ function HistorySessionCard({
     { key: 'other', label: t.other(), value: actions.other, tone: 'default' },
   ];
   const activeActions = actionEntries.filter((a) => a.value > 0);
-  const deletions = session.deletions ?? [];
   const startedEpoch = session.started_at ? new Date(session.started_at).getTime() / 1000 : 0;
 
   return (
@@ -181,7 +207,6 @@ function HistorySessionCard({
               <span className="history-session-time">
                 {formatDateTime(session.started_at)} → {formatDateTime(session.ended_at)}
               </span>
-              <Badge tone="default">{t.duration()}: {formatDuration(session.duration_seconds)}</Badge>
             </div>
           </div>
           <div className="history-session-actions">
@@ -202,28 +227,12 @@ function HistorySessionCard({
                   { label: t.command(), value: <code>{session.command}</code> },
                   { label: t.started(), value: formatDateTime(session.started_at) },
                   { label: t.ended(), value: formatDateTime(session.ended_at) },
-                  { label: t.duration(), value: formatDuration(session.duration_seconds) },
-                  { label: t.operations(), value: activeActions.map((a) => `${a.value}`).join(' / ') || '0' },
+                  { label: common.items(), value: String(session.items ?? 0) },
+                  { label: common.size(), value: session.size ?? '—' },
+                  { label: t.operations(), value: activeActions.map((a) => `${a.label}:${a.value}`).join(' · ') || '0' },
                 ]}
               />
             </div>
-
-            {deletions.length > 0 ? (
-              <div className="history-deletions-table">
-                <div className="history-deletions-head">
-                  <span className="col-ts">{t.timestamp()}</span>
-                  <span className="col-path">{t.pathCol()}</span>
-                  <span className="col-mode">{t.mode()}</span>
-                  <span className="col-status">{t.statusCol()}</span>
-                  <span className="col-size">{common.size()}</span>
-                </div>
-                {deletions.map((d, j) => (
-                  <HistoryDeletionRow key={j} deletion={d} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState title={t.noHistory()} />
-            )}
           </div>
         )}
       </Card>
@@ -233,9 +242,9 @@ function HistorySessionCard({
 
 function HistoryDeletionRow({ deletion }: { deletion: HistoryDeletion }) {
   return (
-    <div className="history-deletions-row">
+    <div className="history-deletion-row">
       <span className="col-ts">{formatDateTime(deletion.timestamp)}</span>
-      <span className="col-path" title={deletion.path}>
+      <span className="col-path history-deletion-path" title={deletion.path}>
         <code>{deletion.path}</code>
       </span>
       <span className="col-mode">
@@ -243,7 +252,7 @@ function HistoryDeletionRow({ deletion }: { deletion: HistoryDeletion }) {
       </span>
       <span className="col-status">{deletion.status || '—'}</span>
       <span className="col-size">
-        {deletion.size_bytes != null ? formatBytes(deletion.size_bytes) : '—'}
+        {deletion.size_kb != null ? formatKB(deletion.size_kb) : '—'}
       </span>
     </div>
   );

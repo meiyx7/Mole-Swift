@@ -1,7 +1,7 @@
 // Analyze 页：磁盘空间可视化分析
 // 调用 mo analyze --json，展示 Treemap + 列表 + 大文件 + 多选 Trash 删除
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, CardHeader, Button, Badge, Checkbox, EmptyState, Spinner, Modal, KVList } from '../components/ui';
+import { Card, CardHeader, Button, Badge, Checkbox, EmptyState, Spinner, Modal } from '../components/ui';
 import { Treemap, type TreemapNode } from '../components/charts';
 import { runAnalyze, trashPaths, type AnalyzeResult, type AnalyzeEntry } from '../lib/cli';
 import { analyze as t, common } from '../lib/i18n';
@@ -282,7 +282,7 @@ export default function AnalyzePage() {
       {selected.size > 0 && (
         <div className="analyze-select-bar">
           <div className="select-bar-info">
-            <Badge tone="accent">{t.selected(selected.size)}</Badge>
+            <Badge tone="accent">{t.selected()} {selected.size}</Badge>
             <span className="select-bar-size">{formatBytes(selectedSize)}</span>
           </div>
           <div className="select-bar-actions">

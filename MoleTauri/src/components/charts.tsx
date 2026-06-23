@@ -433,7 +433,7 @@ export function Treemap({
         className="treemap-svg"
       >
         {laidOut.map((n, i) => {
-          const isHovered = hovered === n.path ?? n.name;
+          const isHovered = hovered === (n.path ?? n.name);
           const color = n.color ?? colorForName(n.name, i);
           const labelVisible = n.rect.w > 60 && n.rect.h > 28;
           const valueLabel = formatBytes(n.totalValue);
@@ -488,7 +488,7 @@ function squarify(
   rect: Rect,
   depth: number,
   result: LaidOutNode[],
-  totalValue: number,
+  _totalValue: number,
 ) {
   if (nodes.length === 0) return;
   const items = nodes.map((n) => ({ node: n, value: computeValue(n) }));

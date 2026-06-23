@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ThemeProvider, useTheme } from './lib/theme';
+import { ThemeProvider } from './lib/theme';
 import { getLang, setLang, nav, titles } from './lib/i18n';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
