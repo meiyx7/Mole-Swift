@@ -248,59 +248,61 @@ export default function UninstallPage() {
         </Card>
       )}
 
-      {/* 应用卡片网格 */}
+      {/* 应用列表（紧凑表格样式） */}
       {!loading && !error && filteredApps.length > 0 && (
-        <div
-          className="uninstall-grid"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-            gap: '12px',
-          }}
-        >
+        <Card variant="glass" className="uninstall-list-card">
+          {/* 表头 */}
+          <div className="uninstall-list-header">
+            <span className="uninstall-list-check-col"></span>
+            <span className="uninstall-list-name-col">{t.appName()}</span>
+            <span className="uninstall-list-size-col">{t.size()}</span>
+            <span className="uninstall-list-source-col">{t.source()}</span>
+            <span className="uninstall-list-date-col">{t.lastUsed()}</span>
+          </div>
+          {/* 行 */}
           {filteredApps.map((app) => {
             const key = appKey(app);
             const isChecked = selected.has(key);
             const meta = sourceMeta(app.source);
+            // size 显示：优先用 size_kb 计算，为 0 时回退到 CLI 的 size 字符串
+            const sizeDisplay =
+              app.size_kb > 0
+                ? formatBytes(app.size_kb * 1024)
+                : app.size && app.size !== 'N/A'
+                ? app.size
+                : '—';
             return (
-              <Card key={key} variant="glass" className={`uninstall-card ${isChecked ? 'selected' : ''}`}>
-                <div className="uninstall-card-top">
+              <div
+                key={key}
+                className={`uninstall-list-row ${isChecked ? 'selected' : ''}`}
+                onClick={() => toggleSelect(key)}
+              >
+                <span className="uninstall-list-check-col">
                   <Checkbox checked={isChecked} onChange={() => toggleSelect(key)} />
-                  <div
-                    className="uninstall-app-icon"
+                </span>
+                <span className="uninstall-list-name-col">
+                  <span
+                    className="uninstall-app-icon-sm"
                     style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 8,
                       background: iconColor(app.name),
                       color: '#0b0f17',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 700,
-                      fontSize: 18,
-                      flexShrink: 0,
                     }}
                   >
                     {(app.name || '?').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="uninstall-card-name" title={app.name}>
-                    {app.name}
-                  </div>
-                </div>
-                <div className="uninstall-card-size">
-                  {formatBytes(app.size_kb * 1024)}
-                </div>
-                <div className="uninstall-card-meta">
-                  <Badge tone={meta.tone}>{meta.label}</Badge>
-                  <span className="uninstall-card-date">
-                    {t.lastUsed()}: {formatRelativeTime(app.last_used_epoch)}
                   </span>
-                </div>
-              </Card>
+                  <span className="uninstall-list-name" title={app.name}>{app.name}</span>
+                </span>
+                <span className="uninstall-list-size-col">{sizeDisplay}</span>
+                <span className="uninstall-list-source-col">
+                  <Badge tone={meta.tone}>{meta.label}</Badge>
+                </span>
+                <span className="uninstall-list-date-col">
+                  {formatRelativeTime(app.last_used_epoch)}
+                </span>
+              </div>
             );
           })}
-        </div>
+        </Card>
       )}
 
       {/* 控制台输出 */}
@@ -371,7 +373,9 @@ export default function UninstallPage() {
           {selectedApps.slice(0, 10).map((app) => (
             <div key={appKey(app)} className="uninstall-confirm-row">
               <span className="uninstall-confirm-name">{app.name}</span>
-              <span className="uninstall-confirm-size">{formatBytes(app.size_kb * 1024)}</span>
+              <span className="uninstall-confirm-size">
+                {app.size_kb > 0 ? formatBytes(app.size_kb * 1024) : (app.size && app.size !== 'N/A' ? app.size : '—')}
+              </span>
             </div>
           ))}
           {selectedApps.length > 10 && (

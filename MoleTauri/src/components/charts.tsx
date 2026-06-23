@@ -48,12 +48,11 @@ export function RingGauge({
 }: RingGaugeProps) {
   const clamped = Math.max(0, Math.min(max, value));
   const ratio = max > 0 ? clamped / max : 0;
-  const diameter = radius * 2;
   const circumference = 2 * Math.PI * radius;
-  // 从顶部开始，顺时针填充
+  // 从顶部开始，顺时针填充：strokeDashoffset = circumference * (1 - ratio)
   const offset = circumference * (1 - ratio);
 
-  // auto 色调：根据比例自动切换
+  // auto 色调：根据比例自动切换（< 50% 良好 / 50-80% 警告 / >= 80% 危险）
   const resolvedTone =
     tone === 'auto'
       ? ratio < 0.5
@@ -63,8 +62,14 @@ export function RingGauge({
         : 'critical'
       : tone;
 
-  const sizePx = size === 'sm' ? diameter + stroke : size === 'lg' ? diameter + stroke + 40 : diameter + stroke + 20;
-  const fontSize = size === 'sm' ? 18 : size === 'lg' ? 32 : 24;
+  // 尺寸：圆环外径 = 2*radius + stroke，再加 padding 容纳刻度和文字
+  const padding = 8;
+  const contentSize = diameter_unused(radius, stroke);
+  const sizePx = size === 'sm' ? contentSize + padding * 2 : size === 'lg' ? contentSize + padding * 2 + 24 : contentSize + padding * 2;
+  const fontSize = size === 'sm' ? 16 : size === 'lg' ? 30 : 22;
+  // 圆心坐标（在 sizePx 坐标系中）
+  const cx = sizePx / 2;
+  const cy = sizePx / 2;
 
   // 刻度
   const ticks = useMemo(() => {
@@ -76,14 +81,14 @@ export function RingGauge({
     for (let i = 0; i < tickCount; i++) {
       const angle = (i / tickCount) * Math.PI * 2 - Math.PI / 2;
       arr.push({
-        x1: radius + Math.cos(angle) * inner,
-        y1: radius + Math.sin(angle) * inner,
-        x2: radius + Math.cos(angle) * outer,
-        y2: radius + Math.sin(angle) * outer,
+        x1: cx + Math.cos(angle) * inner,
+        y1: cy + Math.sin(angle) * inner,
+        x2: cx + Math.cos(angle) * outer,
+        y2: cy + Math.sin(angle) * outer,
       });
     }
     return arr;
-  }, [radius, stroke, showTicks]);
+  }, [cx, cy, radius, stroke, showTicks]);
 
   return (
     <div
@@ -91,38 +96,36 @@ export function RingGauge({
       style={{ width: sizePx, height: sizePx }}
     >
       <svg width={sizePx} height={sizePx} viewBox={`0 0 ${sizePx} ${sizePx}`}>
-        <g transform={`translate(${(sizePx - diameter) / 2 - stroke / 2}, ${(sizePx - diameter) / 2 - stroke / 2})`}>
-          {/* 背景轨道 */}
-          <circle
-            cx={radius}
-            cy={radius}
-            r={radius}
-            fill="none"
-            strokeWidth={stroke}
-            className="ring-gauge-track"
-          />
-          {/* 进度弧 */}
-          <circle
-            cx={radius}
-            cy={radius}
-            r={radius}
-            fill="none"
-            strokeWidth={stroke}
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            transform={`rotate(-90 ${radius} ${radius})`}
-            className="ring-gauge-progress"
-          />
-          {/* 刻度 */}
-          {ticks.map((t, i) => (
-            <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} className="ring-gauge-tick" />
-          ))}
-        </g>
+        {/* 背景轨道 */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={radius}
+          fill="none"
+          strokeWidth={stroke}
+          className="ring-gauge-track"
+        />
+        {/* 进度弧：rotate(-90 cx cy) 让起点从顶部开始 */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={radius}
+          fill="none"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          transform={`rotate(-90 ${cx} ${cy})`}
+          className="ring-gauge-progress"
+        />
+        {/* 刻度 */}
+        {ticks.map((t, i) => (
+          <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} className="ring-gauge-tick" />
+        ))}
         {/* 中心文字 */}
         <text
-          x={sizePx / 2}
-          y={sizePx / 2}
+          x={cx}
+          y={cy}
           textAnchor="middle"
           dominantBaseline="central"
           className="ring-gauge-value"
@@ -132,8 +135,8 @@ export function RingGauge({
         </text>
         {label && (
           <text
-            x={sizePx / 2}
-            y={sizePx / 2 - fontSize / 2 - 6}
+            x={cx}
+            y={cy - fontSize / 2 - 6}
             textAnchor="middle"
             className="ring-gauge-label"
           >
@@ -142,8 +145,8 @@ export function RingGauge({
         )}
         {subText && (
           <text
-            x={sizePx / 2}
-            y={sizePx / 2 + fontSize / 2 + 12}
+            x={cx}
+            y={cy + fontSize / 2 + 12}
             textAnchor="middle"
             className="ring-gauge-sub"
           >
@@ -153,6 +156,11 @@ export function RingGauge({
       </svg>
     </div>
   );
+}
+
+/// 计算圆环内容区直径（不含 padding）
+function diameter_unused(radius: number, stroke: number): number {
+  return radius * 2 + stroke;
 }
 
 // ===========================================================================

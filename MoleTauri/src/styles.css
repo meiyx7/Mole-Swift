@@ -2541,7 +2541,7 @@ a:hover {
 .status-bar-fill.warn { background: var(--warn); }
 .status-bar-fill.critical { background: var(--critical); }
 
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
   .status-rings-row {
     grid-template-columns: 1fr;
   }
@@ -3186,6 +3186,111 @@ a:hover {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 12px;
+}
+
+/* 紧凑列表样式（替代卡片网格，节省空间） */
+.uninstall-list-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.uninstall-list-header,
+.uninstall-list-row {
+  display: grid;
+  grid-template-columns: 40px 1fr 90px 80px 100px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+}
+
+.uninstall-list-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-inset);
+}
+
+.uninstall-list-row {
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.uninstall-list-row:hover {
+  background: var(--bg-hover);
+}
+
+.uninstall-list-row.selected {
+  background: var(--accent-soft);
+}
+
+.uninstall-list-row:last-child {
+  border-bottom: none;
+}
+
+.uninstall-list-check-col {
+  display: flex;
+  align-items: center;
+}
+
+.uninstall-list-name-col {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.uninstall-app-icon-sm {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.uninstall-list-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.uninstall-list-size-col {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.uninstall-list-source-col {
+  display: flex;
+  align-items: center;
+}
+
+.uninstall-list-date-col {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-align: right;
+}
+
+@media (max-width: 700px) {
+  .uninstall-list-header,
+  .uninstall-list-row {
+    grid-template-columns: 32px 1fr 80px;
+  }
+  .uninstall-list-source-col,
+  .uninstall-list-date-col {
+    display: none;
+  }
 }
 
 .uninstall-app-card {

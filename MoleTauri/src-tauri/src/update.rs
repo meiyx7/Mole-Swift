@@ -335,17 +335,22 @@ fn install_app(new_app: &PathBuf) -> Result<String, String> {
     let _ = fs::remove_dir_all(&tmp_dir);
 
     // 8. 启动新应用并退出当前进程
+    //    用 `nohup open` 确保新进程不依赖当前进程，避免 exit 后 open 也被杀掉。
     logger::log(logger::LogLevel::Info, "启动新应用并退出");
 
+    // 先用 `open` 启动新应用（macOS 会通过 LaunchServices 管理生命周期）
     let _ = Command::new("open")
+        .arg("-n")  // -n 表示启动新实例，即使已有实例运行
         .arg(install_target.to_str().unwrap_or(""))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn();
 
-    // 给一点时间让 open 生效，然后退出
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    // 等待 open 命令完成（让 LaunchServices 注册新应用）
+    std::thread::sleep(std::time::Duration::from_millis(800));
+
+    // 退出当前进程
     std::process::exit(0);
 }
 
