@@ -38,6 +38,12 @@ jobs:
         working-directory: MoleTauri
         run: npx tauri build
 
+      - name: Ad-hoc sign app
+        working-directory: MoleTauri/src-tauri/target/release/bundle/macos
+        run: |
+          codesign --force --deep --options runtime -s - Mole.app
+          codesign --verify --verbose=2 Mole.app
+
       - name: Package .app into zip
         working-directory: MoleTauri/src-tauri/target/release/bundle/macos
         run: |
