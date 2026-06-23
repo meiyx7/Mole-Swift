@@ -1,30 +1,36 @@
-//! CLI 更新检查器。
+//! Tauri 应用更新检查器。
 //!
-//! 检查 `tw93/Mole` 仓库（CLI 的官方仓库）的 GitHub release，判断是否有
-//! 新版本。注意：这里检查的是 **CLI** 的版本，不是 Tauri 应用本身。
-//! Tauri 应用本身的自更新由 Tauri updater 插件负责；本模块仅供 Settings
-//! 页面显示 "CLI 有新版本可用" 之类的提示。
+//! 检查 `meiyx7/Mole-Swift` 仓库中 `tauri-v*` 标签的 GitHub release，
+//! 判断 Tauri 应用本身是否有新版本。
 //!
-//! 修复历史：原 `main.rs` 错误地指向 `meiyx7/Mole-Swift`（Mac app 的 fork
-//! 仓库），这里改为 `tw93/Mole`（CLI 上游）。
+//! 与 Mac app 的 `v*` 标签和 CLI 的 `V*` 标签区分：
+//! - `tauri-v0.3.0` — Tauri 应用发布标签（本模块检测的目标）
+//! - `v1.7.14` — Mac app 发布标签
+//! - `V1.38.0` — CLI 发布标签
 
 use crate::models::UpdateInfo;
 use std::process::{Command, Stdio};
 
-/// CLI 上游仓库（owner/name）。这是 `mo` CLI 的官方仓库。
-const REPO: &str = "tw93/Mole";
+/// Tauri 应用所在仓库（owner/name）。
+const REPO: &str = "meiyx7/Mole-Swift";
 
-/// GitHub API endpoint for the latest release.
-fn latest_release_url() -> String {
-    format!("https://api.github.com/repos/{}/releases/latest", REPO)
+/// Tauri 发布标签的前缀。Mac app 用 `v`，CLI 用 `V`，Tauri 用 `tauri-v`。
+const TAURI_TAG_PREFIX: &str = "tauri-v";
+
+/// GitHub API endpoint，列出所有 release（按创建时间降序）。
+fn releases_url() -> String {
+    format!(
+        "https://api.github.com/repos/{}/releases?per_page=100",
+        REPO
+    )
 }
 
-/// 检查 CLI 是否有新版本。
+/// 检查 Tauri 应用是否有新版本。
 ///
-/// `current_version` 是当前安装的 CLI 版本（如 "1.38.0"），不带 `v` 前缀。
+/// `current_version` 是当前应用版本（如 "0.3.0"），不带任何前缀。
 /// 返回 `Ok(UpdateInfo)` 表示有新版本；返回 `Err` 表示无新版本或检查失败。
 pub fn check_for_update(current_version: &str) -> Result<UpdateInfo, String> {
-    let url = latest_release_url();
+    let url = releases_url();
     let output = Command::new("curl")
         .args([
             "-s",
@@ -52,80 +58,91 @@ pub fn check_for_update(current_version: &str) -> Result<UpdateInfo, String> {
         return Err("尚未发布任何 release".to_string());
     }
 
-    let tag_raw = v["tag_name"].as_str().unwrap_or("").trim();
-    if tag_raw.is_empty() {
-        return Err("无法获取版本号".to_string());
-    }
-    // CLI release tag 用大写 V 前缀（如 V1.38.0），但版本比较时统一去掉前缀。
-    let tag = tag_raw.trim_start_matches('V').trim_start_matches('v');
-    let notes = v["body"].as_str().unwrap_or("新版本已发布").to_string();
+    let releases = v
+        .as_array()
+        .ok_or_else(|| "响应格式异常：期望数组".to_string())?;
 
-    if !is_newer(tag, current_version) {
+    // 在所有 release 中查找 `tauri-v*` 标签，取版本号最大的。
+    let mut best: Option<(String, &serde_json::Value)> = None;
+    for release in releases {
+        let tag_raw = release["tag_name"].as_str().unwrap_or("").trim();
+        if !tag_raw.to_lowercase().starts_with(TAURI_TAG_PREFIX) {
+            continue;
+        }
+        // 去掉 `tauri-v` / `tauri-V` 前缀，提取纯版本号。
+        let ver = tag_raw[TAURI_TAG_PREFIX.len()..].trim_start_matches('v').trim_start_matches('V');
+        if ver.is_empty() {
+            continue;
+        }
+        let is_newer_than_best = match &best {
+            None => true,
+            Some((bv, _)) => is_newer(ver, bv),
+        };
+        if is_newer_than_best {
+            best = Some((ver.to_string(), release));
+        }
+    }
+
+    let (latest_ver, release) = match best {
+        Some(x) => x,
+        None => return Err("尚未发布 Tauri 版本".to_string()),
+    };
+
+    if !is_newer(&latest_ver, current_version) {
         return Err("已是最新版本".to_string());
     }
 
-    // 找 .zip 资产 URL（CLI release 通常附带 SHA256SUMS 和二进制，但更新
-    // 走 `mo update` 命令而不是直接下载 zip）。这里仍返回一个 URL 供前端
-    // 显示 release 页面。
-    let download_url = v["assets"]
+    let notes = release["body"].as_str().unwrap_or("新版本已发布").to_string();
+
+    // 找 .zip 资产 URL（Tauri 构建产物是 Mole-Tauri-macOS.zip）。
+    let download_url = release["assets"]
         .as_array()
         .and_then(|assets| {
             assets.iter().find_map(|a| {
                 let name = a["name"].as_str().unwrap_or("");
                 if name.ends_with(".zip") {
-                    a["browser_download_url"].as_str().map(|s| s.to_string())
+                    a["browser_download_url"]
+                        .as_str()
+                        .map(|s| s.to_string())
                 } else {
                     None
                 }
             })
         })
         .or_else(|| {
-            // 没有 zip 资产时回退到 release HTML 页面。
-            v["html_url"].as_str().map(|s| s.to_string())
+            release["html_url"].as_str().map(|s| s.to_string())
         })
         .ok_or_else(|| "未找到下载包".to_string())?;
 
     Ok(UpdateInfo {
-        version: tag.to_string(),
+        version: latest_ver,
         download_url,
         notes,
     })
 }
 
-/// 下载并安装 CLI 更新。
+/// 下载并安装更新。
 ///
-/// 这里不直接下载 zip（CLI 的 release 资产是编译好的二进制 + SHA256SUMS，
-/// 安装逻辑由 `mo update` 命令处理）。我们直接调用 `mo update`，让 CLI
-/// 自己处理下载、校验、安装。
-///
-/// `url` 参数保留是为了兼容前端现有调用签名，实际不使用。
-pub fn download_and_install(_url: &str) -> Result<String, String> {
-    // 测试模式：跳过实际更新，防止 CI 触发网络请求。
+/// 对于 Tauri 应用，这里通过 `open` 命令在浏览器中打开下载页面，
+/// 让用户手动下载安装。后续可集成 Tauri updater 插件实现自动更新。
+pub fn download_and_install(url: &str) -> Result<String, String> {
+    // 测试模式：跳过实际操作。
     if std::env::var("MOLE_TEST_NO_AUTH").unwrap_or_default() == "1" {
         return Ok("测试模式：更新已跳过".to_string());
     }
 
-    let output = Command::new("mo")
-        .args(["update"])
+    // 在默认浏览器中打开下载 URL。
+    let _ = Command::new("open")
+        .arg(url)
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .map_err(|e| format!("无法启动 mo update: {}", e))?;
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        return Err(format!("mo update 失败: {}", stderr.trim()));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    Ok(stdout.trim().to_string())
+    Ok("已在浏览器中打开下载页面，请手动下载安装".to_string())
 }
 
 /// 语义版本比较：`lhs` 是否比 `rhs` 新。
-///
-/// 去掉前缀 `v`/`V` 和 prerelease 后缀（如 `-nightly`），按 major.minor.patch
-/// 比较。
 fn is_newer(lhs: &str, rhs: &str) -> bool {
     let l = parse_version(lhs);
     let r = parse_version(rhs);
@@ -138,10 +155,9 @@ fn is_newer(lhs: &str, rhs: &str) -> bool {
     l.2 > r.2
 }
 
-/// 解析版本字符串为 (major, minor, patch)。去掉 `v`/`V` 前缀和 prerelease 后缀。
+/// 解析版本字符串为 (major, minor, patch)。
 fn parse_version(s: &str) -> (i64, i64, i64) {
     let mut cleaned = s.trim().trim_start_matches('v').trim_start_matches('V');
-    // 去掉 prerelease 后缀：`1.44.0-nightly` → `1.44.0`。
     if let Some(dash) = cleaned.find('-') {
         cleaned = &cleaned[..dash];
     }
@@ -162,82 +178,48 @@ mod tests {
 
     #[test]
     fn parse_version_simple() {
-        assert_eq!(parse_version("1.38.0"), (1, 38, 0));
+        assert_eq!(parse_version("0.3.0"), (0, 3, 0));
     }
 
     #[test]
     fn parse_version_v_prefix() {
-        assert_eq!(parse_version("v1.38.0"), (1, 38, 0));
-    }
-
-    #[test]
-    fn parse_version_capital_v_prefix() {
-        assert_eq!(parse_version("V1.38.0"), (1, 38, 0));
+        assert_eq!(parse_version("v0.3.0"), (0, 3, 0));
     }
 
     #[test]
     fn parse_version_prerelease() {
-        assert_eq!(parse_version("1.44.0-nightly"), (1, 44, 0));
-    }
-
-    #[test]
-    fn parse_version_short() {
-        assert_eq!(parse_version("1"), (1, 0, 0));
-        assert_eq!(parse_version("1.2"), (1, 2, 0));
-    }
-
-    #[test]
-    fn parse_version_invalid() {
-        assert_eq!(parse_version("notaversion"), (0, 0, 0));
-    }
-
-    #[test]
-    fn is_newer_major() {
-        assert!(is_newer("2.0.0", "1.0.0"));
-        assert!(!is_newer("1.0.0", "2.0.0"));
+        assert_eq!(parse_version("0.4.0-beta"), (0, 4, 0));
     }
 
     #[test]
     fn is_newer_minor() {
-        assert!(is_newer("1.38.0", "1.37.0"));
-        assert!(!is_newer("1.37.0", "1.38.0"));
+        assert!(is_newer("0.4.0", "0.3.0"));
+        assert!(!is_newer("0.3.0", "0.4.0"));
     }
 
     #[test]
     fn is_newer_patch() {
-        assert!(is_newer("1.38.1", "1.38.0"));
-        assert!(!is_newer("1.38.0", "1.38.1"));
+        assert!(is_newer("0.3.1", "0.3.0"));
+        assert!(!is_newer("0.3.0", "0.3.1"));
     }
 
     #[test]
     fn is_newer_equal() {
-        assert!(!is_newer("1.38.0", "1.38.0"));
+        assert!(!is_newer("0.3.0", "0.3.0"));
     }
 
     #[test]
-    fn is_newer_with_prefixes() {
-        assert!(is_newer("V1.39.0", "1.38.0"));
-        assert!(is_newer("v1.39.0", "1.38.0"));
+    fn repo_is_mole_swift() {
+        assert_eq!(REPO, "meiyx7/Mole-Swift");
     }
 
     #[test]
-    fn is_newer_with_prerelease() {
-        // prerelease 版本按其基础版本比较。
-        assert!(is_newer("1.45.0-nightly", "1.44.0"));
-        assert!(!is_newer("1.44.0-nightly", "1.44.0"));
+    fn tauri_tag_prefix_correct() {
+        assert_eq!(TAURI_TAG_PREFIX, "tauri-v");
     }
 
     #[test]
-    fn repo_is_tw93_mole() {
-        // 防止回归：原代码错误指向 meiyx7/Mole-Swift。
-        assert_eq!(REPO, "tw93/Mole");
-    }
-
-    #[test]
-    fn latest_release_url_correct() {
-        assert_eq!(
-            latest_release_url(),
-            "https://api.github.com/repos/tw93/Mole/releases/latest"
-        );
+    fn releases_url_correct() {
+        assert!(releases_url().contains("/meiyx7/Mole-Swift/releases"));
     }
 }

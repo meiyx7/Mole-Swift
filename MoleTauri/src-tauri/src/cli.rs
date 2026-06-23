@@ -11,6 +11,7 @@ use crate::models::CommandOutput;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 
 /// 默认附加到所有清理类命令的环境变量。
 ///
@@ -18,6 +19,99 @@ use std::process::{Command, Stdio};
 /// 这对 GUI 后台调用至关重要：Tauri 命令没有 TTY，任何 `read` 调用都会立即
 /// 拿到 EOF，但 CLI 仍可能尝试 prompt，浪费一次循环甚至误判输入。
 const NON_INTERACTIVE_ENV: (&str, &str) = ("MOLE_NON_INTERACTIVE", "1");
+
+/// 缓存的完整 PATH（从 login shell 解析）。
+///
+/// macOS GUI 应用从 Finder/Dock 启动时只继承最小 PATH
+/// (`/usr/bin:/bin:/usr/sbin:/sbin`)，不含 Homebrew (`/opt/homebrew/bin`)、
+/// `~/.local/bin` 等。这里通过 login shell 解析用户真实 PATH 并缓存，
+/// 让子进程能找到 `mo` 及其依赖。
+static FULL_PATH: OnceLock<String> = OnceLock::new();
+
+/// 缓存的 `mo` 二进制完整路径。
+static MO_PATH: OnceLock<Option<String>> = OnceLock::new();
+
+/// 获取用户完整 PATH（从 login shell 解析，缓存）。
+fn full_path() -> &'static str {
+    FULL_PATH.get_or_init(|| {
+        // 依次尝试 zsh（macOS 默认）和 bash。
+        for shell in ["/bin/zsh", "/bin/bash"] {
+            if let Ok(output) = Command::new(shell)
+                .args(["-l", "-c", "printf '%s' \"$PATH\""])
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .output()
+            {
+                if output.status.success() {
+                    let p = String::from_utf8_lossy(&output.stdout).to_string();
+                    if !p.is_empty() && p.contains('/') {
+                        return p;
+                    }
+                }
+            }
+        }
+        // 回退：常见 macOS 路径。
+        let home = std::env::var("HOME").unwrap_or_default();
+        format!(
+            "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:{}/.local/bin",
+            home
+        )
+    })
+}
+
+/// 解析 `mo` 二进制的完整路径（缓存）。
+///
+/// 依次在 login shell PATH 和常见安装路径中查找可执行文件。
+fn resolve_mo() -> Option<&'static str> {
+    MO_PATH.get_or_init(|| {
+        let path = full_path();
+        // 在 PATH 各目录中搜索 `mo`。
+        for dir in path.split(':') {
+            if dir.is_empty() {
+                continue;
+            }
+            let candidate = format!("{}/mo", dir);
+            if is_executable(&candidate) {
+                return Some(candidate);
+            }
+        }
+        // 常见安装路径回退。
+        let home = std::env::var("HOME").unwrap_or_default();
+        let fallbacks = [
+            "/opt/homebrew/bin/mo".to_string(),
+            "/usr/local/bin/mo".to_string(),
+            format!("{}/.local/bin/mo", home),
+        ];
+        for f in &fallbacks {
+            if is_executable(f) {
+                return Some(f.clone());
+            }
+        }
+        None
+    })
+    .as_deref()
+}
+
+/// 返回 `mo` 的完整路径，找不到时回退为 `"mo"`。
+pub fn mo_bin() -> String {
+    resolve_mo().map(|s| s.to_string()).unwrap_or_else(|| "mo".to_string())
+}
+
+#[cfg(unix)]
+fn is_executable(path: &str) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(meta) = std::fs::metadata(path) {
+        meta.is_file() && (meta.permissions().mode() & 0o111 != 0)
+    } else {
+        false
+    }
+}
+
+#[cfg(not(unix))]
+fn is_executable(path: &str) -> bool {
+    Path::new(path).is_file()
+}
 
 /// 运行 `mo` 并捕获全部输出后返回。
 ///
@@ -51,11 +145,17 @@ fn run_binary<F>(bin: &str, args: &[&str], env: &[(&str, &str)], streaming: bool
 where
     F: Fn(String),
 {
-    let mut cmd = match Command::new(bin) {
-        c => c,
-    };
+    // 对 `mo` 命令，解析完整路径并设置 login shell PATH，确保 GUI 环境下也能找到。
+    let resolved = if bin == "mo" { resolve_mo() } else { None };
+    let actual_bin = resolved.unwrap_or(bin);
+
+    let mut cmd = Command::new(actual_bin);
     cmd.args(args);
     cmd.env(NON_INTERACTIVE_ENV.0, NON_INTERACTIVE_ENV.1);
+    // 为 `mo` 子进程设置完整 PATH，让 CLI 能找到 brew/python3 等依赖。
+    if bin == "mo" {
+        cmd.env("PATH", full_path());
+    }
     for (k, v) in env {
         cmd.env(k, v);
     }
@@ -208,19 +308,12 @@ fn normalize_path(path: &str) -> String {
     out
 }
 
-/// 检查 `mo` 命令是否在 `$PATH` 中可用。
+/// 检查 `mo` 命令是否可用。
 ///
-/// 用 `which mo` 实现，避免实际执行 `mo`（启动开销更小，也不会触发 CLI
-/// 的初始化逻辑）。
+/// 通过 login shell PATH 和常见安装路径解析，避免 macOS GUI 应用
+/// 因最小 PATH 而误判 CLI 不可用。
 pub fn check_cli_available() -> bool {
-    Command::new("which")
-        .arg("mo")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+    resolve_mo().is_some()
 }
 
 /// 把一个字符串写入子进程的 stdin（用于 `pbcopy` 等）。

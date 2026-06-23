@@ -1,5 +1,6 @@
 // Settings 页：关于、语言、主题、更新、链接
 import { useState, useEffect, useCallback } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import { Card, CardHeader, Button, Badge, KVList, Spinner, Banner } from '../components/ui';
 import { useTheme } from '../lib/theme';
 import {
@@ -11,8 +12,6 @@ import {
   type UpdateInfo,
 } from '../lib/cli';
 import { settings as t, common, setLang, getLang, type Lang } from '../lib/i18n';
-
-const GUI_VERSION = '1.0.0 (Tauri)';
 
 type UpdateStatus =
   | 'idle'
@@ -26,14 +25,18 @@ type UpdateStatus =
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const [lang, setLangState] = useState<Lang>(getLang());
+  const [appVersion, setAppVersion] = useState('...');
   const [cliVersion, setCliVersion] = useState('...');
   const [cliAvailable, setCliAvailable] = useState<boolean | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateError, setUpdateError] = useState('');
 
-  // 加载 CLI 版本与可用性
+  // 加载应用版本、CLI 版本与可用性
   useEffect(() => {
+    getVersion()
+      .then((v) => setAppVersion(v || '—'))
+      .catch(() => setAppVersion('—'));
     getMoleVersion()
       .then((v) => setCliVersion(v || '—'))
       .catch(() => setCliVersion('—'));
@@ -59,7 +62,7 @@ export default function SettingsPage() {
     setUpdateError('');
     setUpdateInfo(null);
     try {
-      const info = await checkForUpdate(GUI_VERSION);
+      const info = await checkForUpdate();
       if (info) {
         setUpdateInfo(info);
         setUpdateStatus('available');
@@ -112,7 +115,7 @@ export default function SettingsPage() {
         <KVList
           items={[
             { label: t.appName(), value: 'Mole' },
-            { label: t.guiVersion(), value: GUI_VERSION },
+            { label: t.guiVersion(), value: appVersion },
             {
               label: t.cliVersion(),
               value: (

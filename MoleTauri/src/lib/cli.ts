@@ -358,9 +358,9 @@ export async function copyToClipboard(text: string): Promise<void> {
   await invoke('copy_to_clipboard', { text });
 }
 
-export async function checkForUpdate(currentVersion: string): Promise<UpdateInfo | null> {
+export async function checkForUpdate(): Promise<UpdateInfo | null> {
   try {
-    return await invoke<UpdateInfo>('check_for_update', { currentVersion });
+    return await invoke<UpdateInfo>('check_for_update');
   } catch {
     return null;
   }
