@@ -94,15 +94,99 @@ struct HistoryView: View {
         )
     }
 
+    /// 聚合汇总。优先从 sessions 聚合（覆盖 clean/purge/optimize 等所有命令），
+    /// 因为 sessions 数据来自 operations.log，记录了每次会话的 items 和 size。
+    /// deletions 数组只记录 uninstall/installer 的 mole_delete 调用，
+    /// 对于只跑过 clean 的用户会是空的，不能作为唯一汇总来源。
+    /// 当 deletions 非空时，用其精确字节数校正 sessions 的 size（session.size
+    /// 是人类可读字符串，解析会有精度损失）。
+    private struct HistoryAggregate {
+        let totalItems: Int
+        let totalRemoved: Int
+        let totalTrashed: Int
+        let totalFailed: Int
+        let totalSkipped: Int
+        let reclaimedBytes: Int64
+        let reclaimedText: String
+    }
+
+    private func aggregate(_ result: HistoryResult) -> HistoryAggregate {
+        // 从 sessions 聚合 items 和 actions
+        var sessionItems = 0
+        var removed = 0, trashed = 0, skipped = 0, failed = 0
+        var sessionBytes: Int64 = 0
+
+        for session in result.sessions {
+            sessionItems += session.items
+            removed += session.actions.removed
+            trashed += session.actions.trashed
+            skipped += session.actions.skipped
+            failed += session.actions.failed
+            // 解析 session.size（如 "6KB", "150MB", "0B"）
+            if let bytes = parseSizeString(session.size) {
+                sessionBytes += bytes
+            }
+        }
+
+        // deletions 数组提供精确字节数（仅 uninstall/installer 路径）
+        let deletionBytes: Int64 = result.deletions.compactMap { $0.bytes }.reduce(0, +)
+        let deletionRemovedCount = result.deletions.filter {
+            let s = $0.status.lowercased()
+            return s == "removed" || s == "trashed" || s == "ok"
+        }.count
+
+        // 取两者中较大的值作为回收字节数：
+        // - sessions 涵盖 clean/purge/optimize 但 size 是近似字符串
+        // - deletions 涵盖 uninstall/installer 但有精确字节数
+        let reclaimedBytes = max(sessionBytes, deletionBytes)
+
+        // 已删除项：优先用 sessions 的 actions 总和（更完整），
+        // 回退到 deletions 计数
+        let totalItems = max(sessionItems, removed + trashed + skipped + failed, deletionRemovedCount)
+
+        let reclaimedText = reclaimedBytes > 0
+            ? ByteFormatter.bytes(reclaimedBytes)
+            : loc.t("0 KB", "0 KB")
+
+        return HistoryAggregate(
+            totalItems: totalItems,
+            totalRemoved: removed,
+            totalTrashed: trashed,
+            totalFailed: failed,
+            totalSkipped: skipped,
+            reclaimedBytes: reclaimedBytes,
+            reclaimedText: reclaimedText
+        )
+    }
+
+    /// 解析 CLI 输出的人类可读 size 字符串（如 "6KB", "150MB", "1.2GB", "0B"）
+    /// 为字节数。返回 nil 表示无法解析。
+    private func parseSizeString(_ s: String) -> Int64? {
+        let trimmed = s.trimmingCharacters(in: .whitespaces).uppercased()
+        if trimmed.isEmpty || trimmed == "0B" { return 0 }
+        let patterns: [(String, Double)] = [
+            ("KB", 1024), ("MB", 1024 * 1024), ("GB", 1024 * 1024 * 1024),
+            ("TB", 1024 * 1024 * 1024 * 1024), ("B", 1)
+        ]
+        for (suffix, mult) in patterns {
+            if trimmed.hasSuffix(suffix) {
+                let numStr = trimmed.dropLast(suffix.count).trimmingCharacters(in: .whitespaces)
+                if let n = Double(numStr) { return Int64(n * mult) }
+            }
+        }
+        // 纯数字，假设是字节
+        if let n = Double(trimmed) { return Int64(n) }
+        return nil
+    }
+
     private func summaryRow(_ result: HistoryResult) -> some View {
-        let reclaimed: Int64 = result.deletions.compactMap { $0.bytes }.reduce(0, +)
-        let deletedCount = result.deletions.filter { $0.status.lowercased() == "removed" || $0.status.lowercased() == "trashed" }.count
+        let agg = aggregate(result)
         return HStack(spacing: 14) {
             StatTile(title: loc.t("会话", "Sessions"), value: "\(result.sessions.count)",
                      systemImage: "clock", tone: .neutral)
-            StatTile(title: loc.t("已删除项", "Items Deleted"), value: "\(deletedCount)",
+            StatTile(title: loc.t("已删除项", "Items Deleted"), value: "\(agg.totalItems)",
                      systemImage: "trash", tone: .good)
-            StatTile(title: loc.t("回收空间", "Space Reclaimed"), value: ByteFormatter.bytes(reclaimed),
+            StatTile(title: loc.t("回收空间", "Space Reclaimed"), value: agg.reclaimedText,
                      systemImage: "arrow.down.circle", tone: .good)
         }
     }
