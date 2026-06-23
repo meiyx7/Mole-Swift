@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Mole Tauri 默认权限",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:app:allow-get-version"
+  ]
+}

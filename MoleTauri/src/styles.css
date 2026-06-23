@@ -910,9 +910,8 @@ a:hover {
   justify-content: center;
 }
 
-.ring-gauge svg {
-  transform: rotate(-90deg);
-}
+/* Note: progress arc rotation is handled inline via transform="rotate(-90 cx cy)"
+   on the <circle> element itself, NOT on the whole SVG, so center text stays upright. */
 
 .ring-gauge-track {
   fill: none;
