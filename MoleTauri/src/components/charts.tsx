@@ -2,6 +2,11 @@
 // 纯 SVG 实现，无外部图表库依赖，主题通过 CSS 变量继承。
 import { useMemo, useState } from 'react';
 
+/// 安全转数组：非数组返回 []。防御外部传入非数组导致 .map() 崩溃。
+function toArray<T>(v: unknown): T[] {
+  return Array.isArray(v) ? v : [];
+}
+
 // ===========================================================================
 // RingGauge：环形仪表盘
 // 用途：Status 健康评分、CPU/内存占用率
@@ -194,20 +199,27 @@ export function LineChart({
   legend = true,
   unit,
 }: LineChartProps) {
-  const padding = { top: 12, right: 12, bottom: labels ? 22 : 8, left: 36 };
+  // 防御：series / labels 可能不是数组
+  const safeSeries = toArray<LineSeries>(series).map((s) => ({
+    ...s,
+    points: toArray<number>(s.points),
+  }));
+  const safeLabels = toArray<string>(labels);
+
+  const padding = { top: 12, right: 12, bottom: safeLabels.length ? 22 : 8, left: 36 };
   const w = 480; // viewBox 宽度，实际宽度由 CSS 控制
   const h = height;
   const innerW = w - padding.left - padding.right;
   const innerH = h - padding.top - padding.bottom;
 
   // 计算 y 范围
-  const allPoints = series.flatMap((s) => s.points);
+  const allPoints = safeSeries.flatMap((s) => s.points);
   const dataMax = allPoints.length > 0 ? Math.max(...allPoints) : 1;
   const max = yMax ?? Math.ceil(dataMax * 1.1);
   const min = yMin;
   const range = max - min || 1;
 
-  const pointCount = Math.max(...series.map((s) => s.points.length), 0);
+  const pointCount = safeSeries.length > 0 ? Math.max(...safeSeries.map((s) => s.points.length), 0) : 0;
   const xStep = pointCount > 1 ? innerW / (pointCount - 1) : 0;
 
   const toX = (i: number) => padding.left + i * xStep;
@@ -242,8 +254,8 @@ export function LineChart({
           ))}
 
         {/* x 轴标签 */}
-        {labels &&
-          labels.map((lab, i) => {
+        {safeLabels.length > 0 &&
+          safeLabels.map((lab, i) => {
             if (pointCount === 0) return null;
             // 只显示首/中/尾，避免拥挤
             const showIdx = [0, Math.floor(pointCount / 2), pointCount - 1];
@@ -262,7 +274,7 @@ export function LineChart({
           })}
 
         {/* 折线 + 面积 */}
-        {series.map((s, si) => {
+        {safeSeries.map((s, si) => {
           if (s.points.length === 0) return null;
           const linePath = s.points
             .map((v, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(v)}`)
@@ -300,9 +312,9 @@ export function LineChart({
           );
         })}
       </svg>
-      {legend && series.length > 0 && (
+      {legend && safeSeries.length > 0 && (
         <div className="chart-legend">
-          {series.map((s, i) => (
+          {safeSeries.map((s, i) => (
             <span key={i} className="chart-legend-item">
               <span className="chart-legend-dot" style={{ background: s.color ?? 'var(--accent)' }} />
               {s.name}

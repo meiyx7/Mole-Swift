@@ -1,5 +1,28 @@
 // 字节/时间/数字格式化工具
 
+/// 把任意值安全转为数组。非数组（含 null/undefined/对象/字符串）返回 []。
+/// 用于防御 `mo status --json` 返回的字段类型与预期不符时 `.map()` 崩溃。
+export function asArray<T>(v: unknown): T[] {
+  return Array.isArray(v) ? v : [];
+}
+
+/// 安全取数组指定下标元素，越界或非数组时返回 fallback。
+export function arrayGet<T>(v: unknown, idx: number, fallback: T): T {
+  if (!Array.isArray(v)) return fallback;
+  const item = v[idx];
+  return item === undefined ? fallback : (item as T);
+}
+
+/// 安全取数值，非数字返回 fallback。
+export function asNumber(v: unknown, fallback = 0): number {
+  if (typeof v === 'number' && !isNaN(v)) return v;
+  if (typeof v === 'string') {
+    const n = parseFloat(v);
+    return isNaN(n) ? fallback : n;
+  }
+  return fallback;
+}
+
 export function formatBytes(bytes: number, decimals = 1): string {
   if (bytes === 0 || bytes == null) return '0 B';
   if (bytes < 0) return '-' + formatBytes(-bytes, decimals);
