@@ -134,6 +134,7 @@ export default function UninstallPage() {
     setResultMsg(null);
     setConsoleLines([]);
     const count = selectedApps.length;
+    writeLog('info', `卸载执行开始，${count} 个应用`).catch(() => {});
     try {
       const result = await runUninstallStreaming(false, false, true, (line: StreamingLine) => {
         setConsoleLines((prev) => [...prev, line]);
@@ -141,12 +142,17 @@ export default function UninstallPage() {
       if (result.success) {
         setResultMsg(t.uninstalled(count));
         setSelected(new Set());
+        writeLog('info', `卸载执行完成，成功卸载 ${count} 个应用`).catch(() => {});
         await loadApps();
       } else {
-        setResultMsg(result.stderr || result.stdout || common.error());
+        const errMsg = result.stderr || result.stdout || common.error();
+        setResultMsg(errMsg);
+        writeLog('error', `卸载执行失败: ${errMsg}`).catch(() => {});
       }
     } catch (e: any) {
-      setResultMsg(e?.message ?? String(e));
+      const msg = e?.message ?? String(e);
+      setResultMsg(msg);
+      writeLog('error', `卸载执行异常: ${msg}`).catch(() => {});
     } finally {
       setExecuting(false);
     }

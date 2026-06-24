@@ -8,6 +8,7 @@ import {
   downloadAndInstall,
   restartApp,
   checkCli,
+  writeLog,
   type UpdateInfo,
 } from '../lib/cli';
 import { settings as t, common } from '../lib/i18n';
@@ -44,17 +45,21 @@ export default function SettingsPage() {
     setUpdateStatus('checking');
     setUpdateError('');
     setUpdateInfo(null);
+    writeLog('info', '检查更新开始').catch(() => {});
     try {
       const info = await checkForUpdate();
       if (info) {
         setUpdateInfo(info);
         setUpdateStatus('available');
+        writeLog('info', `发现新版本: ${info.version}`).catch(() => {});
       } else {
         setUpdateStatus('upToDate');
+        writeLog('info', '已是最新版本').catch(() => {});
       }
     } catch (e) {
       setUpdateError(e instanceof Error ? e.message : String(e));
       setUpdateStatus('error');
+      writeLog('error', `检查更新失败/异常: ${e instanceof Error ? e.message : String(e)}`).catch(() => {});
     }
   }, []);
 
@@ -62,16 +67,19 @@ export default function SettingsPage() {
     if (!updateInfo) return;
     setUpdateStatus('downloading');
     setUpdateError('');
+    writeLog('info', `下载更新开始: ${updateInfo.download_url}`).catch(() => {});
     try {
       // download_and_install 现在在应用内完成下载+解压+替换+重启，
       // 成功时进程会 exit(0)，不会返回；返回则说明出错。
       const result = await downloadAndInstall(updateInfo.download_url);
       // 如果走到这里，说明没有自动退出（可能是测试模式或出错）
       setUpdateStatus('ready');
+      writeLog('info', '下载更新完成').catch(() => {});
       void result;
     } catch (e) {
       setUpdateError(e instanceof Error ? e.message : String(e));
       setUpdateStatus('error');
+      writeLog('error', `下载更新失败/异常: ${e instanceof Error ? e.message : String(e)}`).catch(() => {});
     }
   }, [updateInfo]);
 

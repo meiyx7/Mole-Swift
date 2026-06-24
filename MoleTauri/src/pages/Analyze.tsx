@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardHeader, Button, Badge, Checkbox, EmptyState, Spinner, Modal } from '../components/ui';
 import { Treemap, type TreemapNode } from '../components/charts';
-import { runAnalyze, trashPaths, type AnalyzeResult, type AnalyzeEntry } from '../lib/cli';
+import { runAnalyze, trashPaths, writeLog, type AnalyzeResult, type AnalyzeEntry } from '../lib/cli';
 import { analyze as t, common } from '../lib/i18n';
 import { formatBytes, formatBytesShort, formatRelativeTime } from '../lib/format';
 
@@ -25,12 +25,15 @@ export default function AnalyzePage() {
     setLoading(true);
     setError(null);
     setSelected(new Set());
+    writeLog('info', `磁盘分析开始: ${scanPath ?? ''}`).catch(() => {});
     try {
       const data = await runAnalyze(scanPath);
       setResult(data);
       setBreadcrumb(data.path ? data.path.split('/').filter(Boolean) : []);
+      writeLog('info', `磁盘分析完成: ${data.path ?? scanPath ?? ''}`).catch(() => {});
     } catch (e: any) {
       setError(e?.message ?? String(e));
+      writeLog('error', `磁盘分析失败/异常: ${e?.message ?? String(e)}`).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -87,15 +90,19 @@ export default function AnalyzePage() {
     setConfirmOpen(false);
     setDeleting(true);
     setDeleteResult(null);
+    const count = selectedEntries.length;
+    writeLog('info', `磁盘分析删除开始，${count} 项`).catch(() => {});
     try {
       const paths = selectedEntries.map((e) => e.path);
-      const count = await trashPaths(paths);
-      setDeleteResult(`已删除 ${count} 项（${formatBytes(selectedSize)}）`);
+      const deleted = await trashPaths(paths);
+      setDeleteResult(`已删除 ${deleted} 项（${formatBytes(selectedSize)}）`);
       setSelected(new Set());
+      writeLog('info', '磁盘分析删除完成').catch(() => {});
       // 重新扫描
       await doScan(result?.path);
     } catch (e: any) {
       setDeleteResult(`删除失败: ${e?.message ?? e}`);
+      writeLog('error', `磁盘分析删除失败/异常: ${e?.message ?? String(e)}`).catch(() => {});
     } finally {
       setDeleting(false);
     }

@@ -2,7 +2,7 @@
 // 调用 Rust 原生扫描器 scanInstaller，按来源分组展示，多选 Trash 删除
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardHeader, Button, Badge, Checkbox, EmptyState, Spinner, Modal, StatTile } from '../components/ui';
-import { scanInstaller, trashPaths, type InstallerFile, type InstallerScanResult } from '../lib/cli';
+import { scanInstaller, trashPaths, writeLog, type InstallerFile, type InstallerScanResult } from '../lib/cli';
 import { installer as t, common } from '../lib/i18n';
 import { formatBytes, formatBytesShort } from '../lib/format';
 
@@ -49,11 +49,14 @@ export default function InstallerPage() {
     setError(null);
     setSelected(new Set());
     setToast(null);
+    writeLog('info', '安装包扫描开始').catch(() => {});
     try {
       const data = await scanInstaller();
       setResult(data);
+      writeLog('info', `安装包扫描完成，共 ${data.total_count} 项`).catch(() => {});
     } catch (e: any) {
       setError(e?.message ?? String(e));
+      writeLog('error', `安装包扫描失败/异常: ${e?.message ?? String(e)}`).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -136,14 +139,17 @@ export default function InstallerPage() {
     setToast(null);
     const count = selectedFiles.length;
     const size = selectedSize;
+    writeLog('info', `安装包删除开始，${count} 项`).catch(() => {});
     try {
       const paths = selectedFiles.map((f) => f.path);
       await trashPaths(paths);
       setToast(t.deleted(count, formatBytes(size)));
       setSelected(new Set());
+      writeLog('info', '安装包删除完成').catch(() => {});
       await doScan();
     } catch (e: any) {
       setToast(`${common.error()}: ${e?.message ?? e}`);
+      writeLog('error', `安装包删除失败/异常: ${e?.message ?? String(e)}`).catch(() => {});
     } finally {
       setDeleting(false);
     }

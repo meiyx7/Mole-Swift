@@ -2,7 +2,7 @@
 // 使用 Rust 原生扫描器 scanPurge，按项目分组展示，支持拖放路径
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Card, CardHeader, Button, Badge, Checkbox, EmptyState, Spinner, Modal, StatTile } from '../components/ui';
-import { scanPurge, trashPaths, type PurgeArtifact, type PurgeScanResult } from '../lib/cli';
+import { scanPurge, trashPaths, writeLog, type PurgeArtifact, type PurgeScanResult } from '../lib/cli';
 import { purge as t, common } from '../lib/i18n';
 import { formatBytes, formatBytesShort } from '../lib/format';
 
@@ -49,11 +49,14 @@ export default function PurgePage() {
     setLoading(true);
     setError(null);
     setSelected(new Set());
+    writeLog('info', '清理产物扫描开始').catch(() => {});
     try {
       const data = await scanPurge(paths);
       setResult(data);
+      writeLog('info', `清理产物扫描完成，共 ${data.total_count} 项`).catch(() => {});
     } catch (e: any) {
       setError(e?.message ?? String(e));
+      writeLog('error', `清理产物扫描失败/异常: ${e?.message ?? String(e)}`).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -125,14 +128,18 @@ export default function PurgePage() {
     setConfirmOpen(false);
     setDeleting(true);
     setToast(null);
+    const count = selectedArtifacts.length;
+    writeLog('info', `清理产物删除开始，${count} 项`).catch(() => {});
     try {
       const paths = selectedArtifacts.map((a) => a.path);
-      const count = await trashPaths(paths);
-      setToast(t.purged(count, formatBytes(selectedSize)));
+      const deleted = await trashPaths(paths);
+      setToast(t.purged(deleted, formatBytes(selectedSize)));
       setSelected(new Set());
+      writeLog('info', '清理产物删除完成').catch(() => {});
       await doScan(extraPaths.length > 0 ? extraPaths : undefined);
     } catch (e: any) {
       setToast(`清理失败: ${e?.message ?? e}`);
+      writeLog('error', `清理产物删除失败/异常: ${e?.message ?? String(e)}`).catch(() => {});
     } finally {
       setDeleting(false);
     }

@@ -2,7 +2,7 @@
 // 使用 PreviewParser 解析 mo clean --dry-run 流式输出
 import { useState, useRef, useCallback } from 'react';
 import { Card, CardHeader, Button, Badge, Toggle, Steps, Banner, EmptyState, Spinner, ConsoleOutput, StatTile } from '../components/ui';
-import { runCleanStreaming, runClean, type StreamingLine } from '../lib/cli';
+import { runCleanStreaming, runClean, writeLog, type StreamingLine } from '../lib/cli';
 import { PreviewParser, type PreviewSection, type PreviewSummary } from '../lib/previewParser';
 import { clean as t, common } from '../lib/i18n';
 import { formatBytes } from '../lib/format';
@@ -37,6 +37,7 @@ export default function CleanPage() {
     let lastSectionCount = 0;
 
     try {
+      writeLog('info', `清理预览开始 (dryRun=${dryRun}, verbose=${verbose})`).catch(() => {});
       const result = await runCleanStreaming(dryRun, verbose, (line: StreamingLine) => {
         parserRef.current.feed(line);
         setConsoleLines((prev) => [...prev, line]);
@@ -55,10 +56,17 @@ export default function CleanPage() {
       setSections(r.sections);
       setSummary(r.summary);
       if (!result.success) {
-        setError(result.stderr || 'Preview failed');
+        const errMsg = result.stderr || 'Preview failed';
+        setError(errMsg);
+        writeLog('error', `清理预览失败: ${errMsg}`).catch(() => {});
+      } else {
+        const itemCount = r.sections.reduce((s, sec) => s + sec.entries.filter((e) => e.kind === 'wouldClean').length, 0);
+        writeLog('info', `清理预览完成，共 ${r.sections.length} 个区块，${itemCount} 项可清理`).catch(() => {});
       }
     } catch (e: any) {
-      setError(e?.message ?? String(e));
+      const msg = e?.message ?? String(e);
+      setError(msg);
+      writeLog('error', `清理预览异常: ${msg}`).catch(() => {});
     } finally {
       setPreviewing(false);
     }
@@ -69,6 +77,7 @@ export default function CleanPage() {
     setExecuting(true);
     setError(null);
     setExecLines([]);
+    writeLog('info', `清理执行开始 (verbose=${verbose})`).catch(() => {});
     try {
       const result = await runClean(false, verbose);
       if (result.stdout) {
@@ -86,12 +95,17 @@ export default function CleanPage() {
         });
       }
       if (!result.success) {
-        setError(result.stderr || 'Clean failed');
+        const errMsg = result.stderr || 'Clean failed';
+        setError(errMsg);
+        writeLog('error', `清理执行失败: ${errMsg}`).catch(() => {});
       } else {
+        writeLog('info', `清理执行完成 (exit_code=${result.exit_code})`).catch(() => {});
         setStep(4);
       }
     } catch (e: any) {
-      setError(e?.message ?? String(e));
+      const msg = e?.message ?? String(e);
+      setError(msg);
+      writeLog('error', `清理执行异常: ${msg}`).catch(() => {});
     } finally {
       setExecuting(false);
     }

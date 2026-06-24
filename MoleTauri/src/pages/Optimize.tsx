@@ -2,10 +2,17 @@
 // 使用 runOptimizeStreaming 流式执行 mo optimize，支持白名单管理
 import { useState, useCallback, useMemo } from 'react';
 import { Card, CardHeader, Button, Badge, Toggle, Checkbox, Steps, Banner, EmptyState, Spinner, ConsoleOutput } from '../components/ui';
-import { runOptimizeStreaming, type StreamingLine } from '../lib/cli';
+import { runOptimizeStreaming, writeLog, type StreamingLine } from '../lib/cli';
 import { optimize as t, common } from '../lib/i18n';
 
 type Step = 1 | 2 | 3;
+
+// 系统默认白名单项 — 这些是系统目录/模式，不允许删除
+const DEFAULT_WHITELIST: readonly string[] = [
+  'com.apple.*',
+  '/System/Library/*',
+  '~/Library/Preferences/com.apple.*',
+];
 
 interface OptimizeTask {
   id: string;
@@ -22,11 +29,7 @@ export default function OptimizePage() {
   const [consoleLines, setConsoleLines] = useState<StreamingLine[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [appliedCount, setAppliedCount] = useState(0);
-  const [whitelist, setWhitelist] = useState<string[]>([
-    'com.apple.*',
-    '/System/Library/*',
-    '~/Library/Preferences/com.apple.*',
-  ]);
+  const [whitelist, setWhitelist] = useState<string[]>([...DEFAULT_WHITELIST]);
   const [whitelistInput, setWhitelistInput] = useState('');
 
   const tasks: OptimizeTask[] = useMemo(() => [
@@ -59,8 +62,12 @@ export default function OptimizePage() {
   };
 
   const removeWhitelist = (pattern: string) => {
+    // 系统默认白名单项不允许删除
+    if (DEFAULT_WHITELIST.includes(pattern)) return;
     setWhitelist(whitelist.filter((p) => p !== pattern));
   };
+
+  const isDefaultWhitelist = (pattern: string) => DEFAULT_WHITELIST.includes(pattern);
 
   const startOptimize = useCallback(async () => {
     setStep(2);
@@ -68,18 +75,24 @@ export default function OptimizePage() {
     setError(null);
     setConsoleLines([]);
     setAppliedCount(0);
+    writeLog('info', `优化执行开始 (dryRun=${dryRun}, ${selected.size} 个任务)`).catch(() => {});
     try {
       const result = await runOptimizeStreaming(dryRun, (line: StreamingLine) => {
         setConsoleLines((prev) => [...prev, line]);
       });
       if (!result.success) {
-        setError(result.stderr || 'Optimize failed');
+        const errMsg = result.stderr || 'Optimize failed';
+        setError(errMsg);
+        writeLog('error', `优化执行失败: ${errMsg}`).catch(() => {});
       } else {
         setAppliedCount(selected.size);
         setStep(3);
+        writeLog('info', `优化执行完成，已应用 ${selected.size} 个任务`).catch(() => {});
       }
     } catch (e: any) {
-      setError(e?.message ?? String(e));
+      const msg = e?.message ?? String(e);
+      setError(msg);
+      writeLog('error', `优化执行异常: ${msg}`).catch(() => {});
     } finally {
       setExecuting(false);
     }
@@ -157,12 +170,19 @@ export default function OptimizePage() {
             </div>
             {whitelist.length > 0 ? (
               <div className="optimize-whitelist-list">
-                {whitelist.map((pattern) => (
-                  <div key={pattern} className="whitelist-row">
-                    <span className="whitelist-pattern" title={pattern}>{pattern}</span>
-                    <button className="icon-btn" onClick={() => removeWhitelist(pattern)} aria-label={common.remove()}>✕</button>
-                  </div>
-                ))}
+                {whitelist.map((pattern) => {
+                  const isDefault = isDefaultWhitelist(pattern);
+                  return (
+                    <div key={pattern} className="whitelist-row">
+                      <span className="whitelist-pattern" title={pattern}>{pattern}</span>
+                      {isDefault ? (
+                        <span title="系统默认，不可删除" style={{ fontSize: 12 }}>🔒</span>
+                      ) : (
+                        <button className="icon-btn" onClick={() => removeWhitelist(pattern)} aria-label={common.remove()}>✕</button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <EmptyState

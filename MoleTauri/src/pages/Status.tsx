@@ -8,7 +8,7 @@
 // - disks[] 无 free 字段（需用 total-used 计算），无 name（用 mount）
 // - gpu 是数组
 // - cpu 有 load1/load5/load15 而非 load_avg 数组
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardHeader, Button, Badge, StatTile, KVList, Spinner, EmptyState } from '../components/ui';
 import { RingGauge, LineChart } from '../components/charts';
 import { runStatusJson, type StatusSnapshot } from '../lib/cli';
@@ -17,6 +17,7 @@ import { formatBytes, formatBytesShort, formatNumber, asArray, asNumber } from '
 import { writeLog } from '../lib/cli';
 
 const REFRESH_INTERVAL = 5000;
+const NET_HISTORY_MAX = 60; // 前端累积最多 60 个点（5 分钟）
 
 export default function StatusPage() {
   const [snapshot, setSnapshot] = useState<StatusSnapshot | null>(null);
@@ -24,11 +25,33 @@ export default function StatusPage() {
   const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
+  // 前端网络历史累积 — CLI 是一次性命令，每次调用只有 1 个历史点，
+  // 需要在前端跨刷新周期累积 rx/tx 速率用于绘制折线图。
+  const netRxHistRef = useRef<number[]>([]);
+  const netTxHistRef = useRef<number[]>([]);
+
   const fetchStatus = useCallback(async () => {
     try {
       const data = await runStatusJson();
       setSnapshot(data);
       setError(null);
+
+      // 累积网络历史：CLI 一次性输出只有当前快照，前端跨刷新累积
+      const nets = asArray<any>(data.network);
+      if (nets.length > 0) {
+        let totalRx = 0;
+        let totalTx = 0;
+        for (const n of nets) {
+          totalRx += asNumber(n?.rx_rate_mbs, 0);
+          totalTx += asNumber(n?.tx_rate_mbs, 0);
+        }
+        netRxHistRef.current.push(totalRx);
+        netTxHistRef.current.push(totalTx);
+        if (netRxHistRef.current.length > NET_HISTORY_MAX) {
+          netRxHistRef.current.shift();
+          netTxHistRef.current.shift();
+        }
+      }
     } catch (e: any) {
       const msg = e?.message ?? String(e);
       setError(msg);
@@ -89,19 +112,22 @@ export default function StatusPage() {
   const load15 = asNumber(snapshot.cpu?.load15, 0);
   const hasLoad = snapshot.cpu?.load1 != null;
 
-  // 网络：CLI 输出为数组，取第一个接口
+  // 网络：CLI 输出为数组，展示所有接口
   const netInterfaces = asArray<any>(snapshot.network);
-  const primaryNet = netInterfaces.length > 0 ? netInterfaces[0] : null;
-  const netName = primaryNet?.name ?? '';
-  const netIp = primaryNet?.ip ?? '';
-  // 速率 MB/s → bytes/s 用于显示
-  const dlBytesPerSec = asNumber(primaryNet?.rx_rate_mbs, 0) * 1024 * 1024;
-  const ulBytesPerSec = asNumber(primaryNet?.tx_rate_mbs, 0) * 1024 * 1024;
+  // 汇总所有接口的速率用于右上角 Badge 和图表
+  let totalDlMbs = 0;
+  let totalUlMbs = 0;
+  for (const n of netInterfaces) {
+    totalDlMbs += asNumber(n?.rx_rate_mbs, 0);
+    totalUlMbs += asNumber(n?.tx_rate_mbs, 0);
+  }
+  const dlBytesPerSec = totalDlMbs * 1024 * 1024;
+  const ulBytesPerSec = totalUlMbs * 1024 * 1024;
 
-  // 网络历史：CLI 直接提供 rx_history / tx_history 数组（MB/s）
-  const rxHistory = asArray<number>(snapshot.network_history?.rx_history);
-  const txHistory = asArray<number>(snapshot.network_history?.tx_history);
-  const hasNetHistory = rxHistory.length > 1 || txHistory.length > 1;
+  // 网络历史：使用前端累积的历史数据（CLI 一次性命令无法跨调用保持历史）
+  const rxHistory = netRxHistRef.current;
+  const txHistory = netTxHistRef.current;
+  const hasNetHistory = rxHistory.length > 1;
   const netLabels = rxHistory.length > 0
     ? rxHistory.map((_, i) => {
         const idx = Math.max(0, rxHistory.length - 1 - i);
@@ -230,7 +256,7 @@ export default function StatusPage() {
         <Card variant="glass">
           <CardHeader
             title={t.network()}
-            subtitle={netName}
+            subtitle={netInterfaces.map((n) => n?.name).filter(Boolean).join(', ') || '—'}
             action={
               <div className="status-net-stats">
                 <Badge tone="good">↓ {formatBytesShort(dlBytesPerSec)}/s</Badge>
@@ -255,9 +281,25 @@ export default function StatusPage() {
               <EmptyState title={common.noData()} description="等待网络历史数据（自动刷新累积）" />
             )}
           </div>
-          {netIp && (
-            <div className="status-net-ip">
-              IP: <code>{netIp}</code>
+          {/* 所有网络接口列表 */}
+          {netInterfaces.length > 0 && (
+            <div className="status-net-interfaces">
+              {netInterfaces.map((n, i) => {
+                const name = n?.name ?? '—';
+                const ip = n?.ip ?? '';
+                const rx = asNumber(n?.rx_rate_mbs, 0) * 1024 * 1024;
+                const tx = asNumber(n?.tx_rate_mbs, 0) * 1024 * 1024;
+                return (
+                  <div key={i} className="status-net-iface">
+                    <span className="status-net-iface-name">{name}</span>
+                    {ip && <code className="status-net-iface-ip">{ip}</code>}
+                    <span className="status-net-iface-rate">
+                      <span className="status-net-iface-dl">↓{formatBytesShort(rx)}/s</span>
+                      <span className="status-net-iface-ul">↑{formatBytesShort(tx)}/s</span>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </Card>
