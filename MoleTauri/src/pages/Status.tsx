@@ -188,8 +188,9 @@ export default function StatusPage() {
               value={healthScore}
               max={100}
               size="lg"
-              tone="auto"
+              tone={healthScore >= 80 ? 'success' : healthScore >= 50 ? 'warn' : 'critical'}
               label="SCORE"
+              centerText={`${healthScore.toFixed(0)}`}
               subText={healthScore >= 80 ? t.normal() : healthScore >= 50 ? 'Fair' : 'Poor'}
             />
             <div className="status-ring-meta">

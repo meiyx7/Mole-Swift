@@ -332,8 +332,8 @@ export async function scanInstaller(): Promise<InstallerScanResult> {
 
 // ---- Trash 路由 ----
 
-export async function trashPaths(paths: string[]): Promise<number> {
-  return invoke<number>('trash_paths', { paths });
+export async function trashPaths(paths: string[], command?: string): Promise<number> {
+  return invoke<number>('trash_paths', { paths, command: command ?? null });
 }
 
 export async function validatePath(path: string): Promise<string> {

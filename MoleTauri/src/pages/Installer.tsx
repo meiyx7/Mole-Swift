@@ -142,7 +142,7 @@ export default function InstallerPage() {
     writeLog('info', `安装包删除开始，${count} 项`).catch(() => {});
     try {
       const paths = selectedFiles.map((f) => f.path);
-      await trashPaths(paths);
+      await trashPaths(paths, 'installer');
       setToast(t.deleted(count, formatBytes(size)));
       setSelected(new Set());
       writeLog('info', '安装包删除完成').catch(() => {});

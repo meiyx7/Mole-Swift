@@ -132,7 +132,7 @@ export default function PurgePage() {
     writeLog('info', `清理产物删除开始，${count} 项`).catch(() => {});
     try {
       const paths = selectedArtifacts.map((a) => a.path);
-      const deleted = await trashPaths(paths);
+      const deleted = await trashPaths(paths, 'purge');
       setToast(t.purged(deleted, formatBytes(selectedSize)));
       setSelected(new Set());
       writeLog('info', '清理产物删除完成').catch(() => {});

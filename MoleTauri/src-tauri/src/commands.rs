@@ -36,6 +36,101 @@ fn blocking_error() -> CommandOutput {
 }
 
 // ---------------------------------------------------------------------------
+// Mole 操作日志（oplog）写入
+// 与 lib/core/log.sh 的 log_operation 格式保持一致，使 mo history 能解析。
+// 日志路径：~/Library/Logs/mole/operations.log
+// ---------------------------------------------------------------------------
+
+fn oplog_file_path() -> std::path::PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    std::path::PathBuf::from(home)
+        .join("Library/Logs/mole/operations.log")
+}
+
+fn oplog_timestamp() -> String {
+    // 与 lib/core/log.sh 的 get_timestamp 一致：YYYY-MM-DD HH:MM:SS
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = now.as_secs();
+    // 简单的 epoch → 本地时间转换（使用 libc localtime）
+    unsafe {
+        let mut tm: libc_tm = std::mem::zeroed();
+        let tt = secs as i64;
+        localtime_r(&tt, &mut tm);
+        format!(
+            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+            tm.tm_year + 1900,
+            tm.tm_mon + 1,
+            tm.tm_mday,
+            tm.tm_hour,
+            tm.tm_min,
+            tm.tm_sec
+        )
+    }
+}
+
+/// libc tm 结构体（用于 localtime_r）
+#[repr(C)]
+struct libc_tm {
+    tm_sec: i32,
+    tm_min: i32,
+    tm_hour: i32,
+    tm_mday: i32,
+    tm_mon: i32,
+    tm_year: i32,
+    tm_wday: i32,
+    tm_yday: i32,
+    tm_isdst: i32,
+    tm_gmtoff: i64,
+    tm_zone: *const i8,
+}
+
+extern "C" {
+    fn localtime_r(timep: *const i64, result: *mut libc_tm) -> *mut libc_tm;
+}
+
+fn oplog_append(line: &str) {
+    let path = oplog_file_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let _ = writeln!(f, "{}", line);
+    }
+}
+
+/// 写入 session 开始标记
+fn oplog_session_start(command: &str) {
+    let ts = oplog_timestamp();
+    oplog_append(&format!(
+        "# ========== {} session started at {} ==========",
+        command, ts
+    ));
+}
+
+/// 写入单条操作记录
+/// action: TRASHED / REMOVED / SKIPPED / FAILED / REBUILT
+fn oplog_operation(command: &str, action: &str, path: &str) {
+    let ts = oplog_timestamp();
+    oplog_append(&format!("[{}] [{}] {} {}", ts, command, action, path));
+}
+
+/// 写入 session 结束标记
+fn oplog_session_end(command: &str, items: usize, _size_bytes: usize) {
+    let ts = oplog_timestamp();
+    oplog_append(&format!(
+        "# ========== {} session ended at {}, {} items, 0B ==========",
+        command, ts, items
+    ));
+}
+
+// ---------------------------------------------------------------------------
 // 清理类命令
 // ---------------------------------------------------------------------------
 
@@ -310,10 +405,30 @@ pub async fn scan_installer() -> Result<InstallerScanResult, String> {
 /// 返回成功删除的数量。部分失败时返回成功数，全部失败时返回 Err。
 /// 异步执行以避免大量文件删除阻塞 UI。
 #[tauri::command]
-pub async fn trash_paths(paths: Vec<String>) -> Result<usize, String> {
-    tauri::async_runtime::spawn_blocking(move || trash::trash_items(&paths))
-        .await
-        .map_err(|e| format!("删除任务失败: {}", e))?
+pub async fn trash_paths(paths: Vec<String>, command: Option<String>) -> Result<usize, String> {
+    let cmd = command.unwrap_or_else(|| "tauri".to_string());
+    tauri::async_runtime::spawn_blocking(move || {
+        // 写入 mole oplog，使删除操作出现在 mo history 中
+        oplog_session_start(&cmd);
+        let result = trash::trash_items(&paths);
+        let count = paths.len();
+        match &result {
+            Ok(success) => {
+                for p in &paths {
+                    oplog_operation(&cmd, "TRASHED", p);
+                }
+                oplog_session_end(&cmd, *success, 0);
+            }
+            Err(e) => {
+                // 全部失败时也记录 session
+                oplog_session_end(&cmd, 0, 0);
+            }
+        }
+        let _ = count;
+        result
+    })
+    .await
+    .map_err(|e| format!("删除任务失败: {}", e))?
 }
 
 /// 路径校验命令：前端可在调用删除前先校验路径。
@@ -556,14 +671,14 @@ mod tests {
 
     #[tokio::test]
     async fn trash_paths_empty_returns_ok_zero() {
-        let result = trash_paths(vec![]).await;
+        let result = trash_paths(vec![], None).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 0);
     }
 
     #[tokio::test]
     async fn trash_paths_invalid_returns_err() {
-        let result = trash_paths(vec!["relative/path".to_string()]).await;
+        let result = trash_paths(vec!["relative/path".to_string()], None).await;
         assert!(result.is_err());
     }
 }

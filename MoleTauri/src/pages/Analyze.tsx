@@ -94,7 +94,7 @@ export default function AnalyzePage() {
     writeLog('info', `磁盘分析删除开始，${count} 项`).catch(() => {});
     try {
       const paths = selectedEntries.map((e) => e.path);
-      const deleted = await trashPaths(paths);
+      const deleted = await trashPaths(paths, 'analyze');
       setDeleteResult(`已删除 ${deleted} 项（${formatBytes(selectedSize)}）`);
       setSelected(new Set());
       writeLog('info', '磁盘分析删除完成').catch(() => {});

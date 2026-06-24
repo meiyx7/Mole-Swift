@@ -1727,7 +1727,7 @@ a:hover {
 .ring-gauge-accent .ring-gauge-progress { stroke: var(--accent); }
 .ring-gauge-success .ring-gauge-progress { stroke: var(--good); }
 .ring-gauge-warn .ring-gauge-progress { stroke: var(--warn); }
-.ring-gauge-critical .ring-gauge-progress { stroke: var(--danger); }
+.ring-gauge-critical .ring-gauge-progress { stroke: var(--critical); }
 
 .ring-gauge-tick {
   stroke: var(--border-strong);
@@ -2203,14 +2203,16 @@ a:hover {
 
 .status-ring-body {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 20px;
+  gap: 12px;
   padding: 12px 4px 4px;
 }
 
 .status-ring-meta {
-  flex: 1;
+  width: 100%;
   min-width: 0;
+  text-align: center;
 }
 
 .status-ring-desc {
@@ -2226,6 +2228,7 @@ a:hover {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+  justify-content: center;
 }
 
 .status-health-leg-item {
