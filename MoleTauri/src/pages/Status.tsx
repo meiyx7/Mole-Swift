@@ -37,7 +37,11 @@ export default function StatusPage() {
       setError(null);
 
       // 累积网络历史：CLI 一次性输出只有当前快照，前端跨刷新累积
-      const nets = asArray<any>(data.network);
+      // 只统计有 IP 的物理接口（排除虚拟/VPN/loopback）
+      const nets = asArray<any>(data.network).filter((n) => {
+        const ip = n?.ip;
+        return ip && typeof ip === 'string' && ip.trim() !== '';
+      });
       if (nets.length > 0) {
         let totalRx = 0;
         let totalTx = 0;
@@ -112,9 +116,13 @@ export default function StatusPage() {
   const load15 = asNumber(snapshot.cpu?.load15, 0);
   const hasLoad = snapshot.cpu?.load1 != null;
 
-  // 网络：CLI 输出为数组，展示所有接口
-  const netInterfaces = asArray<any>(snapshot.network);
-  // 汇总所有接口的速率用于右上角 Badge 和图表
+  // 网络：CLI 输出为数组，过滤只保留有 IP 的物理接口（排除虚拟/VPN/loopback）
+  const allNetInterfaces = asArray<any>(snapshot.network);
+  const netInterfaces = allNetInterfaces.filter((n) => {
+    const ip = n?.ip;
+    return ip && typeof ip === 'string' && ip.trim() !== '';
+  });
+  // 汇总所有有效接口的速率用于右上角 Badge 和图表
   let totalDlMbs = 0;
   let totalUlMbs = 0;
   for (const n of netInterfaces) {

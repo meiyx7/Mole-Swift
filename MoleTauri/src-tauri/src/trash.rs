@@ -58,11 +58,13 @@ fn trash_validated(path: &str) -> Result<(), String> {
         return Ok(());
     }
 
-    let quoted = shell_quote(path);
-    // 用 POSIX file 形式，避免 AppleScript 把 `/` 解释成 HFS 路径分隔符。
+    // AppleScript 用双引号表示字符串，路径中的双引号需转义为 \"。
+    // 不能用单引号（shell_quote），AppleScript 不识别单引号字符串，
+    // 会报 "syntax error: 预期是表达式..." (-2741)。
+    let escaped = path.replace('\\', "\\\\").replace('"', "\\\"");
     let script = format!(
-        "tell application \"Finder\" to delete POSIX file {}",
-        quoted
+        "tell application \"Finder\" to delete POSIX file \"{}\"",
+        escaped
     );
 
     let output = Command::new("osascript")
@@ -86,13 +88,12 @@ fn trash_validated(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// 单引号转义：把 `path` 包在单引号里，内部单引号转义为 `'\''`。
+/// AppleScript 字符串转义：双引号转义为 `\"`，反斜杠转义为 `\\`。
 ///
-/// 这是 POSIX 安全引用，能处理路径中的任意字符（包括空格、`$`、反引号、
-/// 单引号本身），防止 AppleScript 注入。
-fn shell_quote(s: &str) -> String {
-    let escaped = s.replace('\'', "'\\''");
-    format!("'{}'", escaped)
+/// AppleScript 用双引号界定字符串，路径中的双引号和反斜杠必须转义。
+/// 注意：不能用 shell 单引号转义，AppleScript 不识别单引号字符串。
+fn applescript_quote(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 #[cfg(test)]
@@ -100,19 +101,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shell_quote_handles_simple_path() {
-        assert_eq!(shell_quote("/Users/foo/bar"), "'/Users/foo/bar'");
+    fn applescript_quote_handles_simple_path() {
+        assert_eq!(applescript_quote("/Users/foo/bar"), "/Users/foo/bar");
     }
 
     #[test]
-    fn shell_quote_escapes_single_quote() {
-        // 路径含单引号时，转义为 close-quote + escaped-quote + reopen-quote。
-        assert_eq!(shell_quote("/Users/Mole's App"), "'/Users/Mole'\\''s App'");
+    fn applescript_quote_escapes_double_quote() {
+        // 路径含双引号时，转义为 \"
+        assert_eq!(applescript_quote("/Users/Mole\"s App"), "/Users/Mole\\\"s App");
     }
 
     #[test]
-    fn shell_quote_handles_spaces() {
-        assert_eq!(shell_quote("/Users/foo/My Dir"), "'/Users/foo/My Dir'");
+    fn applescript_quote_escapes_backslash() {
+        // 路径含反斜杠时，转义为 \\
+        assert_eq!(applescript_quote("/Users/foo\\bar"), "/Users/foo\\\\bar");
+    }
+
+    #[test]
+    fn applescript_quote_handles_spaces() {
+        assert_eq!(applescript_quote("/Users/foo/My Dir"), "/Users/foo/My Dir");
     }
 
     #[test]

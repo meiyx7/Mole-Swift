@@ -191,8 +191,14 @@ export interface LineChartProps {
   area?: boolean;
   /** 是否显示图例 */
   legend?: boolean;
-  /** y 轴单位 */
+  /** y 轴单位（如 "MB/s"）。传空字符串则不显示单位。 */
   unit?: string;
+  /** y 轴值格式化模式：
+   *  - 'auto'（默认）：根据数值大小自动选择单位（B/s, KB/s, MB/s）
+   *  - 'raw'：直接显示原始值 + unit
+   *  仅当 unit 为 "MB/s" 或 "bytes" 等字节速率单位时 'auto' 生效。
+   */
+  valueFormat?: 'auto' | 'raw';
 }
 
 export function LineChart({
@@ -206,6 +212,7 @@ export function LineChart({
   area = true,
   legend = true,
   unit,
+  valueFormat = 'auto',
 }: LineChartProps) {
   // 防御：series / labels 可能不是数组
   const safeSeries = toArray<LineSeries>(series).map((s) => ({
@@ -240,6 +247,22 @@ export function LineChart({
     return { y, v };
   });
 
+  // 判断是否为字节速率单位，需要自动换算 B/s → KB/s → MB/s → GB/s
+  const isByteRate = valueFormat === 'auto' && unit === 'MB/s';
+
+  // 格式化 Y 轴刻度值
+  const formatAxisValue = (v: number): string => {
+    if (isByteRate) {
+      // v 的单位是 MB/s，转换为字节后选择合适单位
+      const bytesPerSec = v * 1024 * 1024;
+      if (bytesPerSec >= 1024 * 1024 * 1024) return `${(v / 1024).toFixed(1)} GB/s`;
+      if (bytesPerSec >= 1024 * 1024) return `${v.toFixed(1)} MB/s`;
+      if (bytesPerSec >= 1024) return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
+      return `${bytesPerSec.toFixed(0)} B/s`;
+    }
+    return formatTick(v);
+  };
+
   return (
     <div className="line-chart" style={{ width }}>
       <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
@@ -255,8 +278,7 @@ export function LineChart({
                 className="chart-grid-line"
               />
               <text x={padding.left - 6} y={g.y + 3} textAnchor="end" className="chart-axis-label">
-                {formatTick(g.v)}
-                {unit && i === 0 ? unit : ''}
+                {formatAxisValue(g.v)}
               </text>
             </g>
           ))}
