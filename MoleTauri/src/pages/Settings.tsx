@@ -1,8 +1,7 @@
-// Settings 页：关于、语言、主题、更新、链接
+// Settings 页：更新、关于、链接（语言/主题切换已在主界面 TopBar 提供）
 import { useState, useEffect, useCallback } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { Card, CardHeader, Button, Badge, KVList, Spinner, Banner } from '../components/ui';
-import { useTheme } from '../lib/theme';
 import {
   getMoleVersion,
   checkForUpdate,
@@ -11,7 +10,7 @@ import {
   checkCli,
   type UpdateInfo,
 } from '../lib/cli';
-import { settings as t, common, setLang, getLang, type Lang } from '../lib/i18n';
+import { settings as t, common } from '../lib/i18n';
 
 type UpdateStatus =
   | 'idle'
@@ -23,8 +22,6 @@ type UpdateStatus =
   | 'error';
 
 export default function SettingsPage() {
-  const { theme, setTheme } = useTheme();
-  const [lang, setLangState] = useState<Lang>(getLang());
   const [appVersion, setAppVersion] = useState('...');
   const [cliVersion, setCliVersion] = useState('...');
   const [cliAvailable, setCliAvailable] = useState<boolean | null>(null);
@@ -42,20 +39,6 @@ export default function SettingsPage() {
       .catch(() => setCliVersion('—'));
     checkCli().then(setCliAvailable).catch(() => setCliAvailable(false));
   }, []);
-
-  // 监听语言变更（来自 TopBar 或本页）
-  useEffect(() => {
-    const handler = () => setLangState(getLang());
-    window.addEventListener('mole-lang-change', handler);
-    return () => window.removeEventListener('mole-lang-change', handler);
-  }, []);
-
-  const changeLang = (next: Lang) => {
-    if (next === lang) return;
-    setLang(next);
-    setLangState(next);
-    window.dispatchEvent(new Event('mole-lang-change'));
-  };
 
   const handleCheckUpdate = useCallback(async () => {
     setUpdateStatus('checking');
@@ -113,44 +96,6 @@ export default function SettingsPage() {
 
   return (
     <div className="page settings-page" style={{ maxWidth: 720 }}>
-      {/* 语言 */}
-      <Card variant="glass">
-        <CardHeader title={t.language()} icon="🌐" />
-        <div className="flex gap-2">
-          <Button
-            variant={lang === 'zh' ? 'primary' : 'secondary'}
-            onClick={() => changeLang('zh')}
-          >
-            中
-          </Button>
-          <Button
-            variant={lang === 'en' ? 'primary' : 'secondary'}
-            onClick={() => changeLang('en')}
-          >
-            EN
-          </Button>
-        </div>
-      </Card>
-
-      {/* 主题 */}
-      <Card variant="glass">
-        <CardHeader title={t.theme()} icon="🎨" />
-        <div className="flex gap-2">
-          <Button
-            variant={theme === 'dark' ? 'primary' : 'secondary'}
-            onClick={() => setTheme('dark')}
-          >
-            {t.dark()}
-          </Button>
-          <Button
-            variant={theme === 'light' ? 'primary' : 'secondary'}
-            onClick={() => setTheme('light')}
-          >
-            {t.light()}
-          </Button>
-        </div>
-      </Card>
-
       {/* 更新 */}
       <Card variant="glass">
         <CardHeader

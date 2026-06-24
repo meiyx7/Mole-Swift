@@ -31,12 +31,20 @@ export default function CleanPage() {
     setConsoleLines([]);
     parserRef.current.reset();
 
+    // 用行计数器控制刷新频率：每 3 行刷新一次 sections，避免过度渲染。
+    // 同时在新 section 出现时立即刷新，保证用户能看到逐块出现的效果。
+    let lineCount = 0;
+    let lastSectionCount = 0;
+
     try {
       const result = await runCleanStreaming(dryRun, verbose, (line: StreamingLine) => {
         parserRef.current.feed(line);
         setConsoleLines((prev) => [...prev, line]);
-        // 每 10 行刷新一次 sections，避免过度渲染
-        if (parserRef.current.sections.length % 5 === 0) {
+        lineCount++;
+        const curSectionCount = parserRef.current.sections.length;
+        // 新 section 出现 或 每 3 行 刷新一次
+        if (curSectionCount > lastSectionCount || lineCount % 3 === 0) {
+          lastSectionCount = curSectionCount;
           const r = parserRef.current.getResult();
           setSections([...r.sections]);
           if (r.summary) setSummary(r.summary);

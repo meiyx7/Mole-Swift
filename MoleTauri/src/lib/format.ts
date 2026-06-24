@@ -134,3 +134,21 @@ export function sizeColor(bytes: number): string {
   if (bytes >= 100 * 1024 * 1024) return 'accent'; // >= 100MB
   return 'secondary';
 }
+
+/// 解析人类可读的大小字符串（如 "12.3MB", "1.5GB", "456KB"）为字节数。
+/// 用于 size_kb 为 0 时回退解析 size 字符串。
+export function parseSizeString(s: string): number {
+  if (!s) return 0;
+  const m = s.match(/([\d.]+)\s*(TB|GB|MB|KB|B)/i);
+  if (!m) return 0;
+  const val = parseFloat(m[1]);
+  const unit = m[2].toUpperCase();
+  const mult: Record<string, number> = {
+    B: 1,
+    KB: 1024,
+    MB: 1024 * 1024,
+    GB: 1024 * 1024 * 1024,
+    TB: 1024 * 1024 * 1024 * 1024,
+  };
+  return Math.round(val * (mult[unit] || 1));
+}

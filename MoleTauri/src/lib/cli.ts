@@ -44,59 +44,75 @@ export interface AnalyzeResult {
   total_files?: number;
 }
 
-// Status (简化版，实际 schema 更大，按需取用)
+// Status — 字段名严格匹配 `mo status --json` 的实际输出（见 cmd/status/metrics.go）
 export interface StatusSnapshot {
   collected_at: string;
   host: string;
   platform: string;
-  uptime: number;
+  uptime: string; // 人类可读字符串，如 "2 days, 3:45"
+  uptime_seconds: number; // 数值秒数
+  procs?: number;
   hardware?: {
     model?: string;
-    chip?: string;
-    cores?: number;
+    cpu_model?: string;
+    total_ram?: string;
+    disk_size?: string;
+    os_version?: string;
+    refresh_rate?: string;
   };
   health_score?: number;
+  health_score_msg?: string;
   cpu?: {
     usage: number;
     per_core?: number[];
+    per_core_estimated?: boolean;
+    load1?: number;
+    load5?: number;
+    load15?: number;
+    core_count?: number;
+    logical_cpu?: number;
     p_core_count?: number;
     e_core_count?: number;
-    load_avg?: number[];
   };
-  gpu?: {
-    usage?: number;
+  gpu?: Array<{
     name?: string;
-  };
+    usage?: number;
+    memory_used?: number;
+    memory_total?: number;
+    core_count?: number;
+    note?: string;
+  }>;
   memory?: {
-    total: number;
     used: number;
+    total: number;
+    available?: number;
+    used_percent?: number;
+    swap_used?: number;
+    swap_total?: number;
     cached?: number;
     pressure?: string;
-    swap_total?: number;
-    swap_used?: number;
   };
   disks?: Array<{
-    name: string;
     mount: string;
-    total: number;
-    free: number;
+    device?: string;
     used: number;
-    type?: string;
+    total: number;
+    used_percent?: number;
+    fstype?: string;
+    external?: boolean;
   }>;
   trash_size?: number;
-  network?: {
-    interface?: string;
+  trash_approx?: boolean;
+  network?: Array<{
+    name: string;
+    rx_rate_mbs: number; // 接收速率 MB/s
+    tx_rate_mbs: number; // 发送速率 MB/s
     ip?: string;
-    download_speed: number;
-    upload_speed: number;
-    total_downloaded?: number;
-    total_uploaded?: number;
-  };
-  network_history?: Array<{
-    download: number;
-    upload: number;
-    ts: number;
   }>;
+  network_history?: {
+    rx_history?: number[]; // 接收历史 MB/s
+    tx_history?: number[]; // 发送历史 MB/s
+  };
   batteries?: Array<{
     name: string;
     charge: number;
@@ -117,6 +133,7 @@ export interface StatusSnapshot {
     name: string;
     cpu: number;
     memory: number;
+    memory_bytes?: number;
   }>;
 }
 

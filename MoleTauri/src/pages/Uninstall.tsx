@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardHeader, Button, Badge, Checkbox, EmptyState, Spinner, Modal, ConsoleOutput } from '../components/ui';
 import { listApps, runUninstallStreaming, writeLog, copyToClipboard, type AppListEntry, type StreamingLine } from '../lib/cli';
 import { uninstall as t, common } from '../lib/i18n';
-import { formatBytes, formatKB, formatRelativeTime } from '../lib/format';
+import { formatBytes, formatKB, formatRelativeTime, parseSizeString } from '../lib/format';
 
 type SortMode = 'size' | 'date' | 'name';
+type SortDir = 'asc' | 'desc';
 
 const ICON_COLORS = ['#22d3ee', '#a78bfa', '#f472b6', '#34d399', '#fbbf24', '#60a5fa', '#fb7185', '#4ade80'];
 
@@ -27,6 +28,15 @@ function appKey(app: AppListEntry): string {
   return app.uninstall_name || app.name || app.path;
 }
 
+/// 获取应用的有效字节数：优先用 size_kb，为 0 时回退解析 size 字符串。
+function appSizeBytes(app: AppListEntry): number {
+  if (app.size_kb > 0) return app.size_kb * 1024;
+  if (app.size && app.size !== 'N/A' && app.size !== 'Unknown') {
+    return parseSizeString(app.size);
+  }
+  return 0;
+}
+
 export default function UninstallPage() {
   const [apps, setApps] = useState<AppListEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +44,7 @@ export default function UninstallPage() {
   const [errorCopied, setErrorCopied] = useState(false);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortMode>('size');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [executing, setExecuting] = useState(false);
@@ -78,26 +89,28 @@ export default function UninstallPage() {
       list = list.filter((a) => a.name.toLowerCase().includes(q));
     }
     const sorted = [...list];
+    const dir = sortDir === 'asc' ? 1 : -1;
     switch (sort) {
       case 'size':
-        sorted.sort((a, b) => b.size_kb - a.size_kb);
+        sorted.sort((a, b) => (appSizeBytes(a) - appSizeBytes(b)) * dir);
         break;
       case 'date':
-        sorted.sort((a, b) => b.last_used_epoch - a.last_used_epoch);
+        // epoch 为 0 的（无使用记录）在倒序时排到末尾，正序时排到开头
+        sorted.sort((a, b) => (a.last_used_epoch - b.last_used_epoch) * dir);
         break;
       case 'name':
-        sorted.sort((a, b) => a.name.localeCompare(b.name));
+        sorted.sort((a, b) => a.name.localeCompare(b.name) * dir);
         break;
     }
     return sorted;
-  }, [apps, search, sort]);
+  }, [apps, search, sort, sortDir]);
 
   const selectedApps = useMemo(() => {
     return apps.filter((a) => selected.has(appKey(a)));
   }, [apps, selected]);
 
   const selectedSizeKb = useMemo(() => {
-    return selectedApps.reduce((s, a) => s + a.size_kb, 0);
+    return selectedApps.reduce((s, a) => s + Math.round(appSizeBytes(a) / 1024), 0);
   }, [selectedApps]);
 
   const toggleSelect = (key: string) => {
@@ -169,6 +182,15 @@ export default function UninstallPage() {
                 <option value="name">{t.sortName()}</option>
               </select>
             </label>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+              disabled={loading || executing}
+              title={sortDir === 'asc' ? t.sortAsc() : t.sortDesc()}
+            >
+              {sortDir === 'asc' ? '↑' : '↓'}
+            </Button>
             <Button size="sm" variant="ghost" onClick={selectAll} disabled={loading || executing}>
               {common.selectAll()}
             </Button>
