@@ -204,6 +204,39 @@ export const clean = {
   riskHighDesc: () => t('系统文件或需要管理员权限', 'System files or requires admin'),
   riskMediumDesc: () => t('安装包或应用数据', 'Installer or app data'),
   riskLowDesc: () => t('缓存日志，可自动重建', 'Cache/logs, auto-regenerated'),
+  // 区块中文注释（匹配 mo clean 输出的 section 名）
+  sectionComment: (name: string) => {
+    const map: Record<string, string> = {
+      'System Caches': '系统缓存，可安全清理',
+      'User Caches': '用户缓存，可安全清理',
+      'App Caches': '应用缓存，可安全清理',
+      'Log Files': '日志文件，可安全清理',
+      'Application Support': '应用支持数据',
+      'Preferences': '偏好设置，谨慎清理',
+      'Cookies': '浏览器 Cookie',
+      'Download Cache': '下载缓存',
+      'Browser Cache': '浏览器缓存，可安全清理',
+      'Xcode': 'Xcode 开发工具缓存',
+      'Developer': '开发者工具缓存',
+      'AI Tools': 'AI 工具缓存',
+      'Docker': 'Docker 缓存',
+      'Homebrew': 'Homebrew 缓存',
+      'Trash': '废纸篓',
+      'Old Downloads': '旧下载文件',
+      'Crash Logs': '崩溃日志',
+      'System Logs': '系统日志',
+      'Temporary Files': '临时文件',
+      'Thumbnails': '缩略图缓存',
+      'Font Cache': '字体缓存',
+      'Quick Look': 'Quick Look 预览缓存',
+      'Spotlight': 'Spotlight 索引缓存',
+      'Cloud Storage': '云存储缓存',
+      'Device Firmware': '设备固件缓存',
+      'Installer Files': '安装包文件',
+      'Orphaned Files': '孤立文件',
+    };
+    return map[name] || '';
+  },
 };
 
 // 卸载页

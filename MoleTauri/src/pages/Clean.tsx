@@ -179,6 +179,33 @@ export default function CleanPage() {
             </Banner>
           )}
 
+          {/* 显著的清理操作栏 — 放在区块上方，扫描完成后立即可见 */}
+          {hasContent && !previewing && (
+            <Card variant="glass" className="clean-action-bar-card">
+              <div className="clean-action-bar">
+                <div className="clean-action-info">
+                  <Badge tone="accent">{t.itemsToClean(totalItems)}</Badge>
+                  {summary?.totalSizeText && (
+                    <span className="clean-action-size">{summary.totalSizeText}</span>
+                  )}
+                </div>
+                <div className="clean-action-buttons">
+                  <Button variant="ghost" onClick={reset} disabled={executing}>
+                    {common.back()}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    onClick={startClean}
+                    disabled={previewing || !hasContent || executing}
+                  >
+                    {previewing ? common.previewing() : t.startClean()}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
           {/* Section 卡片网格 */}
           {sections.length > 0 ? (
             <div className="clean-sections-grid">
@@ -196,17 +223,6 @@ export default function CleanPage() {
             </Card>
           ) : null}
 
-          {/* 流式控制台 */}
-          {(previewing || consoleLines.length > 0) && (
-            <Card variant="glass">
-              <CardHeader
-                title="Console"
-                action={previewing ? <Spinner size="sm" /> : undefined}
-              />
-              <ConsoleOutput lines={consoleLines} maxLines={300} />
-            </Card>
-          )}
-
           {/* 错误 */}
           {error && (
             <Banner tone="error" title={common.error()}>
@@ -214,18 +230,16 @@ export default function CleanPage() {
             </Banner>
           )}
 
-          {/* 操作栏 */}
-          <div className="clean-step2-actions">
-            <Button variant="ghost" onClick={reset}>{common.back()}</Button>
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={startClean}
-              disabled={previewing || !hasContent || executing}
-            >
-              {previewing ? common.previewing() : t.startClean()}
-            </Button>
-          </div>
+          {/* 流式控制台 — 放在页面最下方 */}
+          {(previewing || consoleLines.length > 0) && (
+            <Card variant="glass" className="clean-console-card">
+              <CardHeader
+                title="Console"
+                action={previewing ? <Spinner size="sm" /> : undefined}
+              />
+              <ConsoleOutput lines={consoleLines} maxLines={300} />
+            </Card>
+          )}
         </>
       )}
 
@@ -275,11 +289,15 @@ function CleanSectionCard({ section }: { section: PreviewSection }) {
   const [expanded, setExpanded] = useState(false);
   const cleanEntries = section.entries.filter((e) => e.kind === 'wouldClean');
   const showEntries = expanded ? cleanEntries : cleanEntries.slice(0, 5);
+  const comment = t.sectionComment(section.name);
 
   return (
     <Card variant="compact" tone={section.hasContent ? 'info-soft' : 'default'}>
       <div className="clean-section-header" onClick={() => setExpanded(!expanded)}>
-        <span className="clean-section-name">{section.name}</span>
+        <div className="clean-section-title-wrap">
+          <span className="clean-section-name">{section.name}</span>
+          {comment && <span className="clean-section-comment">{comment}</span>}
+        </div>
         <div className="clean-section-meta">
           {section.hasContent ? (
             <>

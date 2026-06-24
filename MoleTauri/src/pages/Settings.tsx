@@ -113,33 +113,6 @@ export default function SettingsPage() {
 
   return (
     <div className="page settings-page" style={{ maxWidth: 720 }}>
-      {/* 关于 */}
-      <Card variant="glass">
-        <CardHeader title={t.about()} icon="ℹ️" />
-        <KVList
-          items={[
-            { label: t.appName(), value: 'Mole' },
-            { label: t.guiVersion(), value: appVersion },
-            {
-              label: t.cliVersion(),
-              value: (
-                <span className="flex items-center gap-2">
-                  <span>{cliVersion}</span>
-                  {cliAvailable === false && (
-                    <Badge tone="critical">{common.cliUnavailable()}</Badge>
-                  )}
-                </span>
-              ),
-            },
-            { label: t.framework(), value: 'Tauri + React' },
-            { label: t.cliPath(), value: <code>mo</code> },
-          ]}
-        />
-        <div className="mt-2">
-          <Badge tone="info">{t.minCliVersion()}</Badge>
-        </div>
-      </Card>
-
       {/* 语言 */}
       <Card variant="glass">
         <CardHeader title={t.language()} icon="🌐" />
@@ -242,6 +215,33 @@ export default function SettingsPage() {
             {updateError}
           </Banner>
         )}
+      </Card>
+
+      {/* 关于 */}
+      <Card variant="glass">
+        <CardHeader title={t.about()} icon="ℹ️" />
+        <KVList
+          items={[
+            { label: t.appName(), value: 'Mole' },
+            { label: t.guiVersion(), value: appVersion },
+            {
+              label: t.cliVersion(),
+              value: (
+                <span className="flex items-center gap-2">
+                  <span>{cliVersion}</span>
+                  {cliAvailable === false && (
+                    <Badge tone="critical">{common.cliUnavailable()}</Badge>
+                  )}
+                </span>
+              ),
+            },
+            { label: t.framework(), value: 'Tauri + React' },
+            { label: t.cliPath(), value: <code>mo</code> },
+          ]}
+        />
+        <div className="mt-2">
+          <Badge tone="info">{t.minCliVersion()}</Badge>
+        </div>
       </Card>
 
       {/* 链接 */}

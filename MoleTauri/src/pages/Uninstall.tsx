@@ -178,6 +178,24 @@ export default function UninstallPage() {
             <Button size="sm" variant="ghost" onClick={loadApps} disabled={loading || executing}>
               {common.refresh()}
             </Button>
+            {selected.size > 0 && (
+              <>
+                <span className="uninstall-toolbar-sep" />
+                <Badge tone="accent">{t.selected(selected.size)}</Badge>
+                <span className="uninstall-action-size">{formatKB(selectedSizeKb)}</span>
+                <Button variant="ghost" size="sm" onClick={deselectAll} disabled={executing}>
+                  {common.cancel()}
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={executing}
+                >
+                  {executing ? common.executing() : t.uninstallSelected()}
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </Card>
@@ -321,40 +339,6 @@ export default function UninstallPage() {
         <Card variant="glass">
           <div className="uninstall-result">{resultMsg}</div>
         </Card>
-      )}
-
-      {/* 底部操作栏 */}
-      {selected.size > 0 && (
-        <div
-          className="uninstall-action-bar"
-          style={{
-            position: 'sticky',
-            bottom: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            padding: '12px 16px',
-          }}
-        >
-          <div className="uninstall-action-info">
-            <Badge tone="accent">{t.selected(selected.size)}</Badge>
-            <span className="uninstall-action-size">{formatKB(selectedSizeKb)}</span>
-          </div>
-          <div className="uninstall-action-buttons">
-            <Button variant="ghost" size="sm" onClick={deselectAll} disabled={executing}>
-              {common.cancel()}
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => setConfirmOpen(true)}
-              disabled={executing}
-            >
-              {executing ? common.executing() : t.uninstallSelected()}
-            </Button>
-          </div>
-        </div>
       )}
 
       {/* 确认对话框 */}

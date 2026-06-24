@@ -233,12 +233,12 @@ fn scan_directory(dir: &Path, depth: usize, now: f64, results: &mut Vec<PurgeArt
             }
 
             let age_days = modification_age_days(&path, now).unwrap_or(0);
+            // 使用完整父路径作为 project_path，前端用 replace(group.path, '.')
+            // 得到相对路径展示。仅存 basename 会导致 replace 误匹配中间路径段。
             let project_path = path
                 .parent()
-                .and_then(|p| p.file_name())
-                .and_then(|n| n.to_str())
-                .unwrap_or("")
-                .to_string();
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
 
             results.push(PurgeArtifact {
                 path: path.to_string_lossy().to_string(),

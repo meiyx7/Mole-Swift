@@ -5,7 +5,7 @@
 // 一致（某些字段可能缺失、为 null、或为对象而非数组）。所有 `.map()` 调用和
 // 数值访问都通过 asArray / asNumber / arrayGet 做防御，避免 "L.map is not a
 // function" 之类的运行时崩溃导致白屏。
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardHeader, Button, Badge, StatTile, KVList, Spinner, EmptyState } from '../components/ui';
 import { RingGauge, LineChart } from '../components/charts';
 import { runStatusJson, type StatusSnapshot } from '../lib/cli';
@@ -14,17 +14,39 @@ import { formatBytes, formatBytesShort, formatUptime, formatNumber, asArray, asN
 import { writeLog } from '../lib/cli';
 
 const REFRESH_INTERVAL = 5000;
+const MAX_NET_HISTORY = 30;
+
+interface NetSample {
+  download: number;
+  upload: number;
+  ts: number;
+}
 
 export default function StatusPage() {
   const [snapshot, setSnapshot] = useState<StatusSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  // mo status --json 每次只返回当前速率，不返回历史数组。
+  // 前端用 useRef + useState 累积采样，构建网络历史折线。
+  const [netHistory, setNetHistory] = useState<NetSample[]>([]);
+  const historyRef = useRef<NetSample[]>([]);
 
   const fetchStatus = useCallback(async () => {
     try {
       const data = await runStatusJson();
       setSnapshot(data);
+      // 累积网络历史样本
+      if (data.network) {
+        const sample: NetSample = {
+          download: asNumber(data.network.download_speed, 0),
+          upload: asNumber(data.network.upload_speed, 0),
+          ts: Date.now(),
+        };
+        const next = [...historyRef.current, sample].slice(-MAX_NET_HISTORY);
+        historyRef.current = next;
+        setNetHistory(next);
+      }
       setError(null);
     } catch (e: any) {
       const msg = e?.message ?? String(e);
@@ -81,14 +103,13 @@ export default function StatusPage() {
   const memPressure = snapshot.memory?.pressure ?? 'normal';
   const uptime = asNumber(snapshot.uptime, 0);
 
-  // 网络历史折线（防御：network_history 可能不是数组）
-  const netHistory = asArray<{ download: number; upload: number; ts: number }>(snapshot.network_history);
-  const downloadSeries = netHistory.map((h) => asNumber(h?.download, 0));
-  const uploadSeries = netHistory.map((h) => asNumber(h?.upload, 0));
+  // 网络历史折线：使用前端累积的采样数据（mo status --json 不返回历史数组）
+  const downloadSeries = netHistory.map((h) => h.download);
+  const uploadSeries = netHistory.map((h) => h.upload);
   const netLabels = netHistory.map((_, i) => {
     if (netHistory.length === 0) return '';
     const idx = Math.max(0, netHistory.length - 1 - i);
-    return `-${idx}s`;
+    return `-${idx * (REFRESH_INTERVAL / 1000)}s`;
   }).reverse();
 
   // load_avg 防御
@@ -326,30 +347,34 @@ export default function StatusPage() {
 
         <Card variant="glass">
           <CardHeader title={t.thermal()} subtitle={snapshot.gpu?.name} />
-          <div className="status-thermal-grid">
-            <StatTile
-              label={t.cpu()}
-              value={snapshot.thermal?.cpu_temp != null ? `${asNumber(snapshot.thermal.cpu_temp, 0).toFixed(0)}°C` : '—'}
-            />
-            <StatTile
-              label={t.gpu()}
-              value={snapshot.thermal?.gpu_temp != null ? `${asNumber(snapshot.thermal.gpu_temp, 0).toFixed(0)}°C` : '—'}
-            />
-            <StatTile
-              label={t.fanSpeed()}
-              value={snapshot.thermal?.fan_speed != null ? `${formatNumber(asNumber(snapshot.thermal.fan_speed, 0))} RPM` : '—'}
-            />
-            <StatTile
-              label="Power"
-              value={snapshot.thermal?.system_power != null ? `${asNumber(snapshot.thermal.system_power, 0).toFixed(1)}W` : '—'}
-            />
-            {snapshot.gpu?.usage != null && (
+          {snapshot.thermal && (snapshot.thermal.cpu_temp != null || snapshot.thermal.gpu_temp != null || snapshot.thermal.fan_speed != null || snapshot.thermal.system_power != null) ? (
+            <div className="status-thermal-grid">
               <StatTile
-                label="GPU Usage"
-                value={`${asNumber(snapshot.gpu.usage, 0).toFixed(0)}%`}
+                label={t.cpu()}
+                value={snapshot.thermal?.cpu_temp != null ? `${asNumber(snapshot.thermal.cpu_temp, 0).toFixed(0)}°C` : '—'}
               />
-            )}
-          </div>
+              <StatTile
+                label={t.gpu()}
+                value={snapshot.thermal?.gpu_temp != null ? `${asNumber(snapshot.thermal.gpu_temp, 0).toFixed(0)}°C` : '—'}
+              />
+              <StatTile
+                label={t.fanSpeed()}
+                value={snapshot.thermal?.fan_speed != null ? `${formatNumber(asNumber(snapshot.thermal.fan_speed, 0))} RPM` : '—'}
+              />
+              <StatTile
+                label="Power"
+                value={snapshot.thermal?.system_power != null ? `${asNumber(snapshot.thermal.system_power, 0).toFixed(1)}W` : '—'}
+              />
+              {snapshot.gpu?.usage != null && (
+                <StatTile
+                  label="GPU Usage"
+                  value={`${asNumber(snapshot.gpu.usage, 0).toFixed(0)}%`}
+                />
+              )}
+            </div>
+          ) : (
+            <EmptyState icon="🌡️" title={common.noData()} description="温度传感器数据不可用，可能需要额外权限或第三方工具支持" />
+          )}
         </Card>
       </div>
 
