@@ -355,6 +355,27 @@ struct UninstallView: View {
 
     // MARK: - Helpers
 
+    /// Extracts a human-readable failure reason from CLI console output so the
+    /// feedback banner shows the actual error (e.g. "No matching applications
+    /// found." or "Admin access required...") instead of a bare "exit 1".
+    private func extractFailureReason(from lines: [CLIOutputLine]) -> String? {
+        // Prefer the last stderr line — CLI errors go to stderr.
+        if let lastErr = lines.last(where: { $0.isError && !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }) {
+            return lastErr.text.trimmingCharacters(in: .whitespaces)
+        }
+        // Fall back to known stdout error patterns.
+        for line in lines.reversed() {
+            let trimmed = line.text.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+            if trimmed.contains("No matching applications found") ||
+               trimmed.contains("No applications found") ||
+               trimmed.hasPrefix("Warning: No application found") {
+                return trimmed
+            }
+        }
+        return nil
+    }
+
     private func appIcon(for entry: AppListEntry) -> some View {
         let icon = NSWorkspace.shared.icon(forFile: entry.path.isEmpty ? "/" : entry.path)
         return Image(nsImage: icon)
@@ -464,9 +485,16 @@ struct UninstallView: View {
                     text: loc.t("已卸载\"\(entry.name)\"。", "Uninstalled \"\(entry.name)\".")
                 )
             } else {
-                let detail = runner.error ?? (code == 0
-                    ? loc.t("未输出错误信息，请查看日志。", "No error output; see log for details.")
-                    : loc.t("卸载失败（exit \(code)）。", "Uninstall failed (exit \(code))."))
+                let detail: String
+                if let cliError = runner.error {
+                    detail = cliError
+                } else if let extracted = extractFailureReason(from: runner.lines) {
+                    detail = extracted
+                } else if code == 0 {
+                    detail = loc.t("未输出错误信息，请查看日志。", "No error output; see log for details.")
+                } else {
+                    detail = loc.t("卸载失败（exit \(code)）。", "Uninstall failed (exit \(code)).")
+                }
                 feedback = FeedbackMessage(isSuccess: false, text: detail)
             }
         }

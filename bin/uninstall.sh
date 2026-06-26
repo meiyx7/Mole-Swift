@@ -1144,12 +1144,24 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # Match app names from scan data against user-provided search terms.
-# Performs case-insensitive substring matching on app display names.
-# Returns matched entries from apps_data in selected_apps.
+# Performs case-insensitive matching on app display names, directory basenames,
+# and Homebrew cask names (fallback). Returns matched entries from apps_data
+# in selected_apps.
+#
+# The cask-name fallback matters because `mo uninstall --list` advertises the
+# cask name as `uninstall_name` for Homebrew-managed apps (e.g.
+# "visual-studio-code" instead of "Visual Studio Code"). Without this fallback,
+# the Mole Mac app — which passes `uninstall_name` verbatim — would fail to
+# match any brew cask and exit 1 with "No matching applications found."
 match_apps_by_name() {
     local -a search_terms=("$@")
     selected_apps=()
     local -a matched_indices=()
+
+    local _cask_lookup_available=""
+    if command -v is_homebrew_available > /dev/null 2>&1 && is_homebrew_available 2>/dev/null; then
+        _cask_lookup_available=1
+    fi
 
     for search_term in "${search_terms[@]}"; do
         local search_lower
@@ -1213,6 +1225,39 @@ match_apps_by_name() {
                         matched_indices+=("$idx")
                     fi
                     found=true
+                fi
+                idx=$((idx + 1))
+            done
+        fi
+
+        # If still no match, try Homebrew cask name. The --list output
+        # advertises the cask name as uninstall_name for brew-managed apps,
+        # so callers (including the Mole Mac app) pass the cask name directly.
+        # Cask names use hyphens (e.g. "visual-studio-code") which never match
+        # the display name ("Visual Studio Code") or dir basename.
+        if [[ "$found" == "false" && -n "$_cask_lookup_available" ]]; then
+            idx=0
+            for app_data in "${apps_data[@]}"; do
+                IFS='|' read -r epoch app_path app_name bundle_id size last_used size_kb <<< "$app_data"
+                local cask_name
+                cask_name=$(get_brew_cask_name "$app_path" 2> /dev/null || true)
+                if [[ -n "$cask_name" ]]; then
+                    local cask_lower
+                    cask_lower=$(echo "$cask_name" | tr '[:upper:]' '[:lower:]')
+                    if [[ "$cask_lower" == "$search_lower" ]]; then
+                        local already=false
+                        local mi
+                        for mi in "${matched_indices[@]+"${matched_indices[@]}"}"; do
+                            [[ -z "$mi" ]] && continue
+                            [[ "$mi" == "$idx" ]] && already=true && break
+                        done
+                        if [[ "$already" == "false" ]]; then
+                            selected_apps+=("$app_data")
+                            matched_indices+=("$idx")
+                        fi
+                        found=true
+                        break
+                    fi
                 fi
                 idx=$((idx + 1))
             done

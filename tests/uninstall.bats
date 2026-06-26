@@ -1591,6 +1591,50 @@ EOF
 	[[ "$output" == *"count=1"* ]]
 }
 
+@test "match_apps_by_name matches Homebrew cask name as fallback" {
+	run bash --noprofile --norc <<'EOF'
+set -euo pipefail
+selected_apps=()
+apps_data=(
+	"1000|/Applications/Visual Studio Code.app|Visual Studio Code|com.microsoft.VSCode|420MB|Today|430080"
+)
+source "$PROJECT_ROOT/tests/test_match_apps_helper.sh"
+# Mock Homebrew helpers so the cask-name fallback path is exercised.
+is_homebrew_available() { return 0; }
+get_brew_cask_name() { printf '%s' "visual-studio-code"; return 0; }
+match_apps_by_name "visual-studio-code"
+echo "count=${#selected_apps[@]}"
+for app in "${selected_apps[@]}"; do
+    IFS='|' read -r _ _ name _ _ _ _ <<< "$app"
+    echo "matched=$name"
+done
+EOF
+
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"count=1"* ]]
+	[[ "$output" == *"matched=Visual Studio Code"* ]]
+}
+
+@test "match_apps_by_name skips cask fallback when brew unavailable" {
+	run bash --noprofile --norc <<'EOF'
+set -euo pipefail
+selected_apps=()
+apps_data=(
+	"1000|/Applications/Visual Studio Code.app|Visual Studio Code|com.microsoft.VSCode|420MB|Today|430080"
+)
+source "$PROJECT_ROOT/tests/test_match_apps_helper.sh"
+# Homebrew not installed — cask fallback must not fire.
+is_homebrew_available() { return 1; }
+get_brew_cask_name() { printf '%s' "visual-studio-code"; return 0; }
+match_apps_by_name "visual-studio-code"
+echo "count=${#selected_apps[@]}"
+EOF
+
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"count=0"* ]]
+	[[ "$output" == *"Warning: No application found matching 'visual-studio-code'"* ]]
+}
+
 @test "main clears pending input before app selection after scan (#726)" {
 	run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc <<'INNER'
 set -euo pipefail
