@@ -35,7 +35,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.mole.MoleApp
         PRODUCT_NAME: MoleApp
-        MARKETING_VERSION: "1.7.30"
+        MARKETING_VERSION: "1.7.31"
         CURRENT_PROJECT_VERSION: "18"
         INFOPLIST_FILE: Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Resources/MoleApp.entitlements

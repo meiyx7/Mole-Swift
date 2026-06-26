@@ -364,12 +364,30 @@ struct UninstallView: View {
             return lastErr.text.trimmingCharacters(in: .whitespaces)
         }
         // Fall back to known stdout error patterns.
+        let errorPatterns: [String] = [
+            "No matching applications found",
+            "No applications found",
+            "Warning: No application found",
+            "requires the official",
+            "cannot be removed by Mole",
+            "No uninstallable apps found",
+            "Failed to scan applications",
+            "Failed to load application data",
+            "Admin access required",
+            "Admin access denied",
+        ]
         for line in lines.reversed() {
             let trimmed = line.text.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty { continue }
-            if trimmed.contains("No matching applications found") ||
-               trimmed.contains("No applications found") ||
-               trimmed.hasPrefix("Warning: No application found") {
+            if errorPatterns.contains(where: { trimmed.contains($0) }) {
+                return trimmed
+            }
+        }
+        // Last resort: show the last non-empty output line so the user sees
+        // something useful instead of a bare "exit 1".
+        for line in lines.reversed() {
+            let trimmed = line.text.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty {
                 return trimmed
             }
         }
@@ -470,7 +488,7 @@ struct UninstallView: View {
                 try await service.uninstall(apps: names, permanent: permanent, onLine: onLine)
             }
             uninstallingPath = nil
-            let tail = runner.lines.suffix(8).map { $0.text }.joined(separator: "\n")
+            let tail = runner.lines.suffix(20).map { "[\($0.isError ? "ERR" : "OUT")] \($0.text)" }.joined(separator: "\n")
             DebugLog.append("""
             [UNINSTALL RESULT] target=\(entry.name) exit_code=\(code) \
             line_count=\(runner.lines.count)

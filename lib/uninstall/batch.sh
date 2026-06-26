@@ -942,13 +942,12 @@ _batch_execute_removals() {
             # any echo so the success line does not collide with the spinner.
             [[ -t 1 ]] && stop_inline_spinner
 
-            # Show success
-            if [[ -t 1 ]]; then
-                if [[ ${#app_details[@]} -gt 1 ]]; then
-                    echo -e "${GREEN}${ICON_SUCCESS}${NC} [$current_index/${#app_details[@]}] ${app_name}"
-                else
-                    echo -e "${GREEN}${ICON_SUCCESS}${NC} ${app_name}"
-                fi
+            # Show success (always print, even in non-TTY/GUI mode, so
+            # callers can see the per-app result in the output stream).
+            if [[ ${#app_details[@]} -gt 1 ]]; then
+                echo -e "${GREEN}${ICON_SUCCESS}${NC} [$current_index/${#app_details[@]}] ${app_name}"
+            else
+                echo -e "${GREEN}${ICON_SUCCESS}${NC} ${app_name}"
             fi
 
             # Warn about files that could not be removed and exclude them from freed total.
@@ -989,15 +988,15 @@ _batch_execute_removals() {
             # Stop spinner before printing the failure line so the error
             # message is not painted over by the spinner's next tick.
             [[ -t 1 ]] && stop_inline_spinner
-            if [[ -t 1 ]]; then
-                if [[ ${#app_details[@]} -gt 1 ]]; then
-                    echo -e "${ICON_ERROR} [$current_index/${#app_details[@]}] ${app_name} ${GRAY}, $reason${NC}"
-                else
-                    echo -e "${ICON_ERROR} ${app_name} failed: $reason"
-                fi
-                if [[ -n "${suggestion:-}" ]]; then
-                    echo -e "${GRAY}   ${ICON_REVIEW} ${suggestion}${NC}"
-                fi
+            # Always print failure messages, even in non-TTY/GUI mode,
+            # so non-interactive callers can see why an app failed.
+            if [[ ${#app_details[@]} -gt 1 ]]; then
+                echo -e "${ICON_ERROR} [$current_index/${#app_details[@]}] ${app_name} ${GRAY}, $reason${NC}"
+            else
+                echo -e "${ICON_ERROR} ${app_name} failed: $reason"
+            fi
+            if [[ -n "${suggestion:-}" ]]; then
+                echo -e "${GRAY}   ${ICON_REVIEW} ${suggestion}${NC}"
             fi
 
             failed_count=$((failed_count + 1))
@@ -1240,6 +1239,16 @@ batch_uninstall_applications() {
     fi
 
     if [[ ${#app_details[@]} -eq 0 ]]; then
+        # All selected apps were blocked (official uninstaller required)
+        # or filtered out. The per-app log_warning lines were already
+        # printed in _batch_scan_app_details, but emit a clear summary
+        # so non-interactive callers (e.g. the Mole Mac app) see why the
+        # batch returned non-zero instead of a bare exit 1.
+        if [[ ${#blocked_apps[@]} -gt 0 ]]; then
+            log_error "All selected apps require their official uninstaller and cannot be removed by Mole."
+        else
+            log_error "No uninstallable apps found in the selection."
+        fi
         _restore_uninstall_traps
         return 1
     fi

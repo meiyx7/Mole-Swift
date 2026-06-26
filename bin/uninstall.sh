@@ -1159,7 +1159,7 @@ match_apps_by_name() {
     local -a matched_indices=()
 
     local _cask_lookup_available=""
-    if command -v is_homebrew_available > /dev/null 2>&1 && is_homebrew_available 2>/dev/null; then
+    if command -v is_homebrew_available > /dev/null 2>&1 && is_homebrew_available 2> /dev/null; then
         _cask_lookup_available=1
     fi
 
@@ -1470,14 +1470,17 @@ main() {
     if [[ ${#app_name_args[@]} -gt 0 ]]; then
         local apps_file=""
         if ! apps_file=$(scan_applications); then
+            log_error "Failed to scan applications."
             show_cursor
             return 1
         fi
         if [[ ! -f "$apps_file" ]]; then
+            log_error "Application scan produced no results."
             show_cursor
             return 1
         fi
         if ! load_applications "$apps_file"; then
+            log_error "Failed to load application data."
             rm -f "$apps_file"
             show_cursor
             return 1
