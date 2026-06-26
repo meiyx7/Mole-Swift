@@ -659,7 +659,9 @@ _batch_preview_and_confirm() {
     # Non-interactive callers (e.g. the Mole Mac app) confirm in their own UI
     # and run with stdin closed; skip the blocking read instead of relying on
     # EOF yielding an empty key that happens to match the confirm branch.
-    if [[ "${MOLE_NON_INTERACTIVE:-0}" == "1" ]]; then
+    # Also skip when stdin is not a TTY (e.g. /dev/null) as there is no way
+    # for the user to respond.
+    if [[ "${MOLE_NON_INTERACTIVE:-0}" == "1" || ! -t 0 ]]; then
         echo ""
     else
         drain_pending_input # Clean up any pending input before confirmation

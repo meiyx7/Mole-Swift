@@ -1513,12 +1513,14 @@ main() {
         printf '\n'
         # Non-interactive callers (e.g. the Mole Mac app) have already
         # confirmed via their own UI and drive stdin from /dev/null, so a
-        # blocking read here would hit EOF, leave $confirm empty, and silently
-        # abort with exit 0 — looking like success while deleting nothing.
-        if [[ "${MOLE_NON_INTERACTIVE:-0}" != "1" ]]; then
+        # blocking read here would hit EOF. Under set -e, a bare `read`
+        # returning 1 on EOF kills the script with exit 1 before the
+        # confirm check runs. Guard with both the env var and a TTY check,
+        # and make read safe with || true.
+        if [[ "${MOLE_NON_INTERACTIVE:-0}" != "1" && -t 0 ]]; then
             printf "Proceed with uninstallation? [y/N] "
-            local confirm
-            read -r confirm
+            local confirm=""
+            read -r confirm || confirm=""
             if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
                 echo "Aborted."
                 return 0
